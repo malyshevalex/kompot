@@ -29,6 +29,8 @@ const paintIcons = (root = document) => root.querySelectorAll('[data-ic]').forEa
 
 const TEMPLATE = `#include <iostream>
 
+using namespace std;
+
 int main() {
     return 0;
 }
