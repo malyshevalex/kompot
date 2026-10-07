@@ -1,0 +1,94 @@
+{
+  "name": "kompot",
+  "productName": "Kompot",
+  "version": "1.0.0",
+  "description": "Редактор для олимпиадных задач на C++: код, ввод и тесты рядом",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icon": "electron scripts/render-icon.js",
+    "dev:mac": "sh scripts/guard.sh && electron-builder --mac dir --arm64 -c.mac.identity=null -c.mac.notarize=false",
+    "dist:mac": "sh scripts/guard.sh && APPLE_KEYCHAIN_PROFILE=kletka electron-builder --mac dmg zip --arm64 && sh scripts/notarize-dmg.sh",
+    "dist:win": "electron-builder --win zip --x64",
+    "dist": "npm run dist:mac && npm run dist:win"
+  },
+  "dependencies": {
+    "@fontsource/geist": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "basecoat-css": "^1.0.2",
+    "monaco-editor": "^0.57.0"
+  },
+  "devDependencies": {
+    "7zip-bin": "^5.2.0",
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "ru.kompot.editor",
+    "productName": "Kompot",
+    "copyright": "Kompot",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!node_modules/monaco-editor/{esm,dev}/**",
+      "!node_modules/basecoat-css/templates/**",
+      "!node_modules/@fontsource/*/files/*.woff"
+    ],
+    "extraResources": [
+      {
+        "from": "src/runtime",
+        "to": "runtime"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "identity": "Aleksandr Malyshev (Y9DZYM3P8L)",
+      "extraResources": [
+        {
+          "from": "node_modules/7zip-bin/mac/arm64/7za",
+          "to": "7za"
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "dmg": {
+      "title": "Kompot"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "signAndEditExecutable": true,
+      "extraResources": [
+        {
+          "from": "node_modules/7zip-bin/win/x64/7za.exe",
+          "to": "7za.exe"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+const invoke = (ch) => (...args) => ipcRenderer.invoke(ch, ...args);
+
+contextBridge.exposeInMainWorld('kompot', {
+  settings: invoke('settings:get'),
+  setSettings: invoke('settings:set'),
+  openDialog: invoke('dialog:open'),
+  saveAsDialog: invoke('dialog:saveAs'),
+  read: invoke('fs:read'),
+  write: invoke('fs:write'),
+  rename: invoke('fs:rename'),
+  remove: invoke('fs:delete'),
+  reveal: invoke('fs:reveal'),
+  loadTests: invoke('tests:load'),
+  saveTests: invoke('tests:save'),
+  moveTests: invoke('tests:move'),
+  importTests: invoke('tests:import'),
+  compilerInfo: invoke('compiler:info'),
+  installMacTools: invoke('compiler:installMacTools'),
+  installCompiler: invoke('compiler:install'),
+  build: invoke('build'),
+  runTests: invoke('run:tests'),
+  runInteractive: invoke('run:interactive'),
+  stop: invoke('run:stop'),
+  paths: invoke('app:paths'),
+  lspSync: (text) => ipcRenderer.send('lsp:sync', text),
+  lspStatus: invoke('lsp:status'),
+  lspCompletion: invoke('lsp:completion'),
+  lspHover: invoke('lsp:hover'),
+  lspSignature: invoke('lsp:signature'),
+  lspInstall: invoke('lsp:install'),
+  lspSemantic: invoke('lsp:semantic'),
+  dbgInfo: invoke('dbg:info'),
+  dbgInstall: invoke('dbg:install'),
+  dbgStart: invoke('dbg:start'),
+  dbgBreakpoints: invoke('dbg:breakpoints'),
+  dbgStep: invoke('dbg:step'),
+  dbgRunTo: invoke('dbg:runTo'),
+  editorMenu: (opts) => ipcRenderer.send('menu:editor', opts),
+  dbgVariables: invoke('dbg:variables'),
+  dbgFrame: invoke('dbg:frame'),
+  dbgStop: invoke('dbg:stop'),
+  sendInput: (text) => ipcRenderer.send('console:input', text),
+  sendEof: () => ipcRenderer.send('console:eof'),
+  on: (channel, fn) => {
+    const allowed = ['run:progress', 'console:data', 'theme:system', 'compiler:progress', 'lsp:diagnostics', 'lsp:status', 'dbg:event', 'menu:action'];
+    if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, data) => fn(data));
+  },
+});
