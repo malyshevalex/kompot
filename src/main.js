@@ -88,6 +88,16 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.show());
+  // Закрытие окна и выход: сначала интерфейс спрашивает про несохранённый новый файл (или молча дописывает сохранённый)
+  win.on('close', (e) => {
+    if (closeAllowed || process.env.KOMPOT_DEMO) return;
+    e.preventDefault();
+    closeAcked = false;
+    safeSend(win.webContents, 'app:close-request');
+    setTimeout(() => {
+      if (!closeAcked) finishClose();  // интерфейс завис — закрываемся без вопроса (черновик всё равно сохранён)
+    }, 2000);
+  });
   if (process.env.KOMPOT_DEMO) win.webContents.once('did-finish-load', () => require('./demo')(win));
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -98,6 +108,32 @@ function createWindow() {
 nativeTheme.on('updated', () => {
   if (!IS_MAC && win) win.setTitleBarOverlay(overlayColors());
   toWin('theme:system', nativeTheme.shouldUseDarkColors);
+});
+
+let closeAllowed = false;
+let closeAcked = false;
+let quitting = false;
+function finishClose() {
+  closeAllowed = true;
+  if (quitting) app.quit();
+  else win?.close();
+}
+app.on('before-quit', () => { quitting = true; });
+ipcMain.on('app:close-ack', () => { closeAcked = true; });
+ipcMain.on('app:close', (_e, ok) => {
+  if (ok) finishClose();
+  else quitting = false;  // «Отмена» — остаёмся
+});
+
+// Обычный системный вопрос перед потерей правок; порядок кнопок — как принято в каждой системе
+ipcMain.handle('dialog:confirmSave', async (e, name) => {
+  const ids = IS_MAC ? ['save', 'cancel', 'discard'] : ['save', 'discard', 'cancel'];
+  const label = { save: 'Сохранить…', discard: 'Не сохранять', cancel: 'Отмена' };
+  const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender), {
+    type: 'warning', noLink: true, buttons: ids.map((id) => label[id]), defaultId: 0, cancelId: ids.indexOf('cancel'),
+    message: `Сохранить изменения в «${name}»?`, detail: 'Если не сохранить, изменения пропадут.',
+  });
+  return ids[response];
 });
 
 app.whenReady().then(createWindow);
@@ -415,7 +451,7 @@ ipcMain.handle('lsp:install', async (e) => {
     return { error: String(err.message || err) };
   }
 });
-app.on('before-quit', () => lsp.stop());
+app.on('will-quit', () => lsp.stop());  // will-quit: выход уже не отменят
 
 // ---------- системное контекстное меню редактора ----------
 // Вырезать/копировать/вставить — роли Electron (их ловит textarea Monaco), остальное — команды редактора по событию menu:action
@@ -638,7 +674,7 @@ ipcMain.handle('dbg:stop', async () => {
   endSession();
   toWin('dbg:event', { type: 'terminated' });
 });
-app.on('before-quit', () => dap.stop());
+app.on('will-quit', () => dap.stop());
 
 // ---------- запуск ----------
 const OUTPUT_LIMIT = 8 << 20;

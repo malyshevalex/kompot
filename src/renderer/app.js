@@ -414,13 +414,8 @@ function setDocument(text, file) {
 
 async function confirmLeave() {
   if (!state.dirty && (state.file || !state.tests.length)) return true;
-  if (state.file) {
-    await save(false, true);
-    return true;
-  }
-  const r = await confirmBox('Сохранить решение?', 'Новый файл ещё не сохранён.', [
-    { label: 'Отмена', value: 'cancel' }, { label: 'Не сохранять', value: 'drop' }, { label: 'Сохранить', value: 'save', primary: true },
-  ]);
+  if (state.file) return save(false, true);  // сохранённый файл молча дописываем; не записался — не уходим
+  const r = await askSave('без имени.cpp');
   if (r === 'cancel') return false;
   if (r === 'save') return save(true);
   clearDraft();
@@ -448,6 +443,17 @@ async function openPath(p) {
   const r = await K.read(p);
   if (r.error) {
     toast('Не удалось открыть файл');
+// Системный диалог «Сохранить изменения?»: 'save' | 'discard' | 'cancel'
+async function askSave(name) {
+  return K.confirmSave(name);
+}
+
+// Закрытие окна или выход из приложения
+K.on('app:close-request', async () => {
+  K.closeAck();
+  K.closeDone(await confirmLeave());
+});
+
     const recent = state.settings.recent.filter((x) => x !== p);
     await setSettings({ recent });
     renderSidebar();

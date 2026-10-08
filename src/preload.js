@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld('kompot', {
   dbgBreakpoints: invoke('dbg:breakpoints'),
   dbgStep: invoke('dbg:step'),
   dbgRunTo: invoke('dbg:runTo'),
+  confirmSave: invoke('dialog:confirmSave'),
+  closeAck: () => ipcRenderer.send('app:close-ack'),
+  closeDone: (ok) => ipcRenderer.send('app:close', ok),
   dbgInput: (text) => ipcRenderer.send('dbg:input', text),
   dbgEof: () => ipcRenderer.send('dbg:eof'),
   editorMenu: (opts) => ipcRenderer.send('menu:editor', opts),
@@ -46,7 +49,7 @@ contextBridge.exposeInMainWorld('kompot', {
   sendInput: (text) => ipcRenderer.send('console:input', text),
   sendEof: () => ipcRenderer.send('console:eof'),
   on: (channel, fn) => {
-    const allowed = ['run:progress', 'console:data', 'theme:system', 'compiler:progress', 'lsp:diagnostics', 'lsp:status', 'dbg:event', 'menu:action'];
+    const allowed = ['run:progress', 'console:data', 'theme:system', 'compiler:progress', 'lsp:diagnostics', 'lsp:status', 'dbg:event', 'menu:action', 'app:close-request'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, data) => fn(data));
   },
 });
