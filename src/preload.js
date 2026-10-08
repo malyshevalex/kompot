@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('kompot', {
   dbgBreakpoints: invoke('dbg:breakpoints'),
   dbgStep: invoke('dbg:step'),
   dbgRunTo: invoke('dbg:runTo'),
+  dbgInput: (text) => ipcRenderer.send('dbg:input', text),
+  dbgEof: () => ipcRenderer.send('dbg:eof'),
   editorMenu: (opts) => ipcRenderer.send('menu:editor', opts),
   dbgVariables: invoke('dbg:variables'),
   dbgFrame: invoke('dbg:frame'),

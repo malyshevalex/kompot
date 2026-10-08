@@ -84,6 +84,9 @@
       <div class="dbg-section"><div class="io-label">Переменные</div><div class="vars" id="dbgVars"></div></div>
       <div class="dbg-section"><div class="io-label">Стек вызовов</div><ul class="frames" id="dbgFrames"></ul></div>
       <div class="dbg-section grow"><div class="io-label">Вывод программы</div><pre class="io dbg-out" id="dbgOut"></pre></div>
+      <form class="console-input" id="dbgInputForm" autocomplete="off" hidden>
+        <span class="prompt">›</span><input class="input" id="dbgInput" placeholder="ввод для программы, Enter — отправить, Ctrl+D — конец ввода">
+      </form>
       <div class="dbg-keys"><span><kbd class="kbd">F5</kbd>дальше</span><span><kbd class="kbd">F8</kbd>шаг</span><span><kbd class="kbd">F7</kbd>внутрь</span><span><kbd class="kbd">⇧F8</kbd>выйти</span><span><kbd class="kbd">F4</kbd>до курсора</span><span><kbd class="kbd">F9</kbd>точка останова</span></div>
     </div>
     <div id="testsView" class="view">

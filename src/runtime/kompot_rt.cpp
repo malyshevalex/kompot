@@ -38,6 +38,19 @@ void kompot_report_memory() {
 
 struct Registrar {
     Registrar() {
+        // В отладке вывод без буфера: текст появляется сразу, даже при пошаговом выполнении
+        if (std::getenv("KOMPOT_UNBUFFERED")) {
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+        }
+#ifdef _WIN32
+        // Отладка на Windows: программу запускает Kompot со своими каналами ввода-вывода, а lldb подключается к ней.
+        // До main ждём, пока отладчик подключится (не дольше 20 с), чтобы не проскочить точки останова.
+        if (std::getenv("KOMPOT_WAIT_DEBUGGER")) {
+            for (int i = 0; i < 2000 && !IsDebuggerPresent(); i++) {
+                Sleep(10);
+            }
+        }
+#endif
         std::atexit(kompot_report_memory);
     }
 } registrar;

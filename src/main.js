@@ -1,6 +1,6 @@
 // Основной процесс: окно, файлы, компилятор, запуск решений.
 const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, Menu } = require('electron');
-const { spawn, execFile } = require('child_process');
+const { spawn, execFile, execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -465,8 +465,7 @@ const dap = new Dap({
       send('exited', { code: m.body.exitCode });
     } else if (m.event === 'terminated' || m.event === 'adapterExit') {
       if (session) {
-        session = null;
-        dap.stop();
+        endSession();
         send('terminated', {});
       }
     }
@@ -526,28 +525,72 @@ ipcMain.handle('dbg:install', async (e) => {
 });
 
 // opts.stopAtMain — остановиться в начале main (F7/F8 без точек останова); opts.runTo — выполнить до строки (F4)
-ipcMain.handle('dbg:start', async (_e, source, lines, input, opts = {}) => {
+// Завершить сеанс отладки: закрыть ввод программы, убрать её процесс (Windows) и адаптер
+function endSession() {
+  const s = session;
+  session = null;
+  dap.stop();
+  if (!s) return;
+  try {
+    s.stdin?.destroy();
+  } catch {}
+  if (s.child && s.child.exitCode == null) s.child.kill();
+  if (s.fifo) fs.rmSync(s.fifo, { force: true });
+}
+
+// Ввод программы при отладке.
+// Тест: ввод теста целиком, затем конец ввода. Консоль (opts.interactive): строки, которые ученик набирает в панели «Отладка».
+// Windows: программу запускаем сами — без консольного окна, со своими каналами ввода-вывода — и lldb к ней подключается
+//   (lldb на Windows открывает программе отдельное пустое окно консоли и не умеет передавать ей ввод с клавиатуры).
+// macOS: lldb запускает программу сам; ввод — из файла теста или из именованного канала (FIFO) для консоли.
+ipcMain.handle('dbg:start', async (e, source, lines, input, opts = {}) => {
   const adapter = await findDebugger();
   if (!adapter) return { error: 'missing' };
   const b = await buildSource(source, true);
   if (!b.ok) return { error: 'build', log: b.log, diagnostics: b.diagnostics };
-  const inFile = path.join(b.dir, 'input.txt');
-  fs.writeFileSync(inFile, input || '', 'utf8');
   const fwd = (p) => p.replace(/\\/g, '/');
+  const interactive = !!opts.interactive;
   session = { threadId: 1, dir: b.dir, source: path.join(b.dir, 'main.cpp'), lines: [...lines], temp: opts.runTo ?? null, atMain: !!opts.stopAtMain };
   const env = { ...process.env, PATH: [path.dirname(adapter), path.dirname(compiler.path), process.env.PATH].join(path.delimiter) };
   dap.start(adapter, env);
   const init = await dap.request('initialize', { clientID: 'kompot', adapterID: 'lldb-dap', linesStartAt1: true, columnsStartAt1: true, pathFormat: 'path', supportsVariableType: true });
   if (!init?.success) {
-    session = null;
-    dap.stop();
+    endSession();
     return { error: 'adapter' };
   }
   const initialized = dap.waitEvent('initialized');
-  const launched = dap.request('launch', {
-    program: b.exe, cwd: b.dir, stopOnEntry: false,
-    preRunCommands: [`settings set target.input-path "${fwd(inFile)}"`],
-  }, 30000);
+  let launched;
+  if (IS_WIN) {
+    const child = spawn(b.exe, [], {
+      cwd: b.dir, windowsHide: true,
+      env: { ...process.env, KOMPOT_WAIT_DEBUGGER: '1', KOMPOT_UNBUFFERED: '1' },
+    });
+    session.child = child;
+    session.stdin = child.stdin;
+    child.stdin.on('error', () => {});
+    const out = (stream) => (d) => safeSend(e.sender, 'dbg:event', { type: 'output', stream, text: d.toString('utf8') });
+    child.stdout.on('data', out('stdout'));
+    child.stderr.on('data', out('stderr'));
+    if (!interactive) child.stdin.end(input || '');
+    launched = dap.request('attach', { program: b.exe, pid: child.pid }, 30000);
+  } else {
+    let inPath = path.join(b.dir, 'input.txt');
+    if (interactive) {
+      inPath = path.join(b.dir, 'stdin.fifo');
+      fs.rmSync(inPath, { force: true });
+      execFileSync('/usr/bin/mkfifo', [inPath]);
+      // O_RDWR не блокируется, пока программа не открыла канал (в отличие от O_WRONLY)
+      session.fifo = inPath;
+      session.stdin = fs.createWriteStream(null, { fd: fs.openSync(inPath, fs.constants.O_RDWR) });
+      session.stdin.on('error', () => {});
+    } else {
+      fs.writeFileSync(inPath, input || '', 'utf8');
+    }
+    launched = dap.request('launch', {
+      program: b.exe, cwd: b.dir, stopOnEntry: false, env: ['KOMPOT_UNBUFFERED=1'],
+      preRunCommands: [`settings set target.input-path "${fwd(inPath)}"`],
+    }, 30000);
+  }
   await initialized;
   await setLines(lines);
   if (session.atMain) await dap.request('setFunctionBreakpoints', { breakpoints: [{ name: 'main' }] });
@@ -555,12 +598,14 @@ ipcMain.handle('dbg:start', async (_e, source, lines, input, opts = {}) => {
   await dap.request('configurationDone');
   const r = await launched;
   if (!r?.success) {
-    session = null;
-    dap.stop();
+    endSession();
     return { error: 'launch', message: r?.message || '' };
   }
   return { ok: true };
 });
+
+ipcMain.on('dbg:input', (_e, text) => session?.stdin?.write(text));
+ipcMain.on('dbg:eof', () => session?.stdin?.end());
 
 ipcMain.handle('dbg:breakpoints', async (_e, lines) => {
   if (!session) return null;
@@ -590,8 +635,7 @@ ipcMain.handle('dbg:frame', async (_e, frameId) => frameVariables(frameId));
 ipcMain.handle('dbg:stop', async () => {
   if (!session) return;
   await dap.request('disconnect', { terminateDebuggee: true }, 3000);
-  session = null;
-  dap.stop();
+  endSession();
   toWin('dbg:event', { type: 'terminated' });
 });
 app.on('before-quit', () => dap.stop());

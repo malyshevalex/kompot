@@ -897,9 +897,11 @@ function setStepEnabled(on) {
   document.querySelectorAll('.dbg-btn').forEach((b) => { b.disabled = !on && b.dataset.dbg !== 'stop'; });
 }
 
+// Чем кормить программу при отладке: выбранный тест, первый упавший тест — или ввод с клавиатуры (консоль, нет тестов)
 function pickDebugInput(index) {
   if (index != null && state.tests[index]) return { input: state.tests[index].input, label: `тест #${index + 1}` };
-  if (state.mode === 'console' || !state.tests.length) return { input: '', label: 'без ввода' };
+  const mode = state.mode === 'debug' ? dbg.lastMode : state.mode;
+  if (mode === 'console' || !state.tests.length) return { input: '', label: 'с клавиатуры', interactive: true };
   const bad = state.tests.findIndex((t) => t.result && !['OK', 'DONE'].includes(t.result.verdict));
   const i = bad >= 0 ? bad : 0;
   return { input: state.tests[i].input, label: `тест #${i + 1}` };
@@ -926,7 +928,10 @@ async function startDebug(index = null, opts = {}) {
     });
     return;
   }
-  const { input, label } = pickDebugInput(index);
+  const { input, label, interactive } = pickDebugInput(index);
+  dbg.interactive = !!interactive;
+  $('dbgInput').value = '';
+  $('dbgInputForm').hidden = !dbg.interactive;
   dbg.userStop = false;
   dbg.lastMode = state.mode === 'debug' ? dbg.lastMode : state.mode;
   dbg.prev = new Map();
@@ -939,7 +944,7 @@ async function startDebug(index = null, opts = {}) {
   setStatus(`Отладка: сборка… · ввод: ${label}`, 'busy');
   setDebugUi(true);
   setStepEnabled(false);
-  const r = await K.dbgStart(state.editor.getValue(), [...bpsOf()], input, opts);
+  const r = await K.dbgStart(state.editor.getValue(), [...bpsOf()], input, { ...opts, interactive: dbg.interactive });
   if (r.error) {
     setDebugUi(false);
     if (r.error === 'build') {
@@ -951,6 +956,7 @@ async function startDebug(index = null, opts = {}) {
   }
   setStatus(`Отладка: программа выполняется · ввод: ${label}`, 'busy');
   dbg.label = label;
+  focusDbgInputSoon();
 }
 
 function renderVars(list, box, depth = 0) {
@@ -1039,6 +1045,8 @@ K.on('dbg:event', (e) => {
     setDebugUi(false);
     dbg.stopped = false;
     showLine(null);
+    clearTimeout(dbg.inputTimer);
+    $('dbgInputForm').hidden = true;
   }
 });
 
@@ -1053,9 +1061,44 @@ async function debugCommand(cmd) {
   setStepEnabled(false);
   showLine(null);
   setStatus(`Отладка: программа выполняется · ввод: ${dbg.label || ''}`, 'busy');
+  focusDbgInputSoon();
   if (cmd === 'cursor') await K.dbgRunTo(state.editor.getPosition().lineNumber);
   else await K.dbgStep(cmd);
 }
+
+// Ввод с клавиатуры при отладке: фокус в поле, только если программа работает дольше 250 мс (скорее всего, ждёт ввода)
+function focusDbgInputSoon() {
+  clearTimeout(dbg.inputTimer);
+  if (!dbg.interactive) return;
+  dbg.inputTimer = setTimeout(() => {
+    if (dbg.active && !dbg.stopped) $('dbgInput').focus();
+  }, 250);
+}
+
+function appendDbgOut(text, cls) {
+  const out = $('dbgOut');
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  out.appendChild(span);
+  out.scrollTop = out.scrollHeight;
+}
+
+$('dbgInputForm').onsubmit = (e) => {
+  e.preventDefault();
+  if (!dbg.active) return;
+  const text = `${$('dbgInput').value}\n`;
+  K.dbgInput(text);
+  appendDbgOut(text, 'in');
+  $('dbgInput').value = '';
+};
+$('dbgInput').addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    K.dbgEof();
+    appendDbgOut('[конец ввода]\n', 'in');
+  }
+});
 
 // Шаг или «до курсора» без запущенной отладки начинают её: шаги — с начала main, F4 — до строки с курсором
 function debugKey(cmd) {
