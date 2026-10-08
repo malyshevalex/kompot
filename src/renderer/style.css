@@ -41,6 +41,7 @@
   --float-shadow: 0 10px 28px -12px rgba(9, 9, 11, 0.22);
   --glass: rgba(255, 255, 255, 0.82);   /* всплывающие слои */
   --tab-on: #ffffff;
+  --find-bg: rgba(245, 158, 11, 0.24); --find-cur: rgba(245, 158, 11, 0.5); --find-edge: #d97706;
 
   --ok: #16a34a; --wa: #dc2626; --tle: #d97706; --re: #9333ea; --mle: #ea580c; --ce: #71717a;
   --ui: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -79,6 +80,7 @@
   --float-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.7);
   --glass: rgba(24, 24, 27, 0.8);
   --tab-on: rgba(255, 255, 255, 0.08);
+  --find-bg: rgba(251, 191, 36, 0.2); --find-cur: rgba(251, 191, 36, 0.42); --find-edge: #fbbf24;
 
   --ok: #4ade80; --wa: #f87171; --tle: #fbbf24; --re: #c084fc; --mle: #fb923c; --ce: #a1a1aa;
   color-scheme: dark;
@@ -198,12 +200,12 @@ button { cursor: pointer; }
 .run-slot { display: grid; }
 .run-slot > .btn { grid-area: 1 / 1; justify-content: center; transition: none; }
 .run-slot > .btn.off { visibility: hidden; pointer-events: none; }
-/* компиляция: вместо ▶ крутится маленькое кольцо, надпись и ширина кнопки не меняются */
-.btn.busy .ic svg { display: none; }
 /* «Стоп» лежит поверх «Запустить»: фон непрозрачный, иначе синяя кнопка просвечивает */
 .run-slot > .btn[data-variant="destructive"] {
   background: linear-gradient(180deg, color-mix(in srgb, var(--wa) 14%, transparent), color-mix(in srgb, var(--wa) 8%, transparent)), var(--background);
 }
+/* компиляция: вместо ▶ крутится маленькое кольцо, надпись и ширина кнопки не меняются */
+.btn.busy .ic svg { display: none; }
 .btn.busy .ic::after { content: ""; width: 10px; height: 10px; margin: 1px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #ffffff; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .btn.run-debug { padding: 0 6px 0 10px; }
@@ -245,6 +247,27 @@ button { cursor: pointer; }
 #problemsList .sev-error { color: var(--wa); }
 #problemsList .sev-warning { color: var(--tle); }
 .problems-log { margin: 0; padding: 8px 16px 12px; max-height: 140px; overflow: auto; font: 11.5px/1.5 var(--mono); color: var(--fg-muted); white-space: pre-wrap; user-select: text; }
+
+/* ---------- поиск и замена над редактором ---------- */
+.findbar { display: grid; gap: 6px; padding: 8px 12px 8px 8px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.find-row { display: flex; align-items: center; gap: 6px; }
+.find-gap { width: 32px; flex: none; }
+.find-field { position: relative; flex: 1; min-width: 0; }
+.find-field .input { width: 100%; }
+#findInput { padding-right: 96px; }
+.input.bad { border-color: color-mix(in srgb, var(--wa) 55%, transparent); }
+.find-opts { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; }
+.find-opt { height: 24px; min-width: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); font: 600 12px var(--mono); }
+.find-opt:hover { background: var(--accent); color: var(--foreground); }
+.find-opt[aria-pressed="true"] { color: var(--accent-c); background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-c) 35%, transparent); }
+#findWord { text-decoration: underline; text-underline-offset: 3px; }
+.find-count { min-width: 86px; text-align: right; font: 12px var(--mono); color: var(--fg-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.find-count.none { color: var(--wa); }
+.find-toggle .ic { transition: transform 0.1s; }
+.findbar.with-replace .find-toggle .ic { transform: rotate(90deg); }
+/* совпадения в коде: все — мягко, текущее — ярче и с рамкой */
+.monaco-editor .find-match { background: var(--find-bg); border-radius: 2px; }
+.monaco-editor .find-current { background: var(--find-cur); box-shadow: 0 0 0 1px var(--find-edge); border-radius: 2px; }
 
 /* ---------- онбординг: установка инструментов ---------- */
 .onboard { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: color-mix(in srgb, var(--surface) 70%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }

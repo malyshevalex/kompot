@@ -24,6 +24,12 @@ const ICONS = {
   stepOut: '<path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="19.2" r="1.8" fill="currentColor"/>',
   flask: '<path d="M9.5 3.5h5M10.5 3.5v6L5 18.5A1.5 1.5 0 0 0 6.3 20.7h11.4A1.5 1.5 0 0 0 19 18.5l-5.5-9v-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 15h9" stroke="currentColor" stroke-width="1.6"/>',
 };
+const ICONS_EXTRA = {
+  chevron: '<path d="M9.5 6.5 15 12l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+  arrowUp: '<path d="M12 19V5.5M6.5 11 12 5.5 17.5 11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+  arrowDown: '<path d="M12 5v13.5M6.5 13l5.5 5.5 5.5-5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+};
+Object.assign(ICONS, ICONS_EXTRA);
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 const paintIcons = (root = document) => root.querySelectorAll('[data-ic]').forEach((el) => { el.innerHTML = icon(el.dataset.ic); });
 
@@ -223,6 +229,10 @@ function initMonaco() {
       ed.onDidChangeModelContent(() => {
         markDirty();
         scheduleSync();
+        if (find.open && !find.editing) {
+          clearTimeout(find.timer);
+          find.timer = setTimeout(() => runFind(true), 120);
+        }
       });
       ed.onDidChangeCursorPosition((e) => { $('sbCursor').textContent = `Стр ${e.position.lineNumber}, стлб ${e.position.column}`; });
       const KM = monaco.KeyMod;
@@ -244,6 +254,17 @@ function initMonaco() {
       ed.addCommand(KM.CtrlCmd | KC.F2, () => debugCommand('stop'), 'kompotDebug');
       bindBreakpointGutter();
       ed.onContextMenu(() => K.editorMenu({ hasSelection: !ed.getSelection().isEmpty(), debugging: dbg.active }));
+      // Свой поиск и замена вместо панели Monaco
+      find.ctx = ed.createContextKey('kompotFindOpen', false);
+      ed.addCommand(KM.CtrlCmd | KC.KeyF, () => openFind(false));
+      ed.addCommand(IS_MAC ? KM.CtrlCmd | KM.Alt | KC.KeyF : KM.CtrlCmd | KC.KeyH, () => openFind(true));
+      ed.addCommand(KC.F3, () => (find.open ? findStep(1) : openFind(false)));
+      ed.addCommand(KM.Shift | KC.F3, () => (find.open ? findStep(-1) : openFind(false)));
+      if (IS_MAC) {
+        ed.addCommand(KM.CtrlCmd | KC.KeyG, () => (find.open ? findStep(1) : openFind(false)));
+        ed.addCommand(KM.CtrlCmd | KM.Shift | KC.KeyG, () => (find.open ? findStep(-1) : openFind(false)));
+      }
+      ed.addCommand(KC.Escape, () => closeFind(), 'kompotFindOpen && !suggestWidgetVisible && !parameterHintsVisible');
       ed.addCommand(KM.CtrlCmd | KC.KeyS, () => save());
       ed.addCommand(KM.CtrlCmd | KM.Shift | KC.KeyS, () => save(true));
       ed.addCommand(KM.CtrlCmd | KC.KeyO, openFile);
@@ -422,6 +443,17 @@ async function confirmLeave() {
   return true;
 }
 
+// Системный диалог «Сохранить изменения?»: 'save' | 'discard' | 'cancel'
+async function askSave(name) {
+  return K.confirmSave(name);
+}
+
+// Закрытие окна или выход из приложения
+K.on('app:close-request', async () => {
+  K.closeAck();
+  K.closeDone(await confirmLeave());
+});
+
 async function newFile() {
   if (!(await confirmLeave())) return;
   clearDraft();
@@ -443,17 +475,6 @@ async function openPath(p) {
   const r = await K.read(p);
   if (r.error) {
     toast('Не удалось открыть файл');
-// Системный диалог «Сохранить изменения?»: 'save' | 'discard' | 'cancel'
-async function askSave(name) {
-  return K.confirmSave(name);
-}
-
-// Закрытие окна или выход из приложения
-K.on('app:close-request', async () => {
-  K.closeAck();
-  K.closeDone(await confirmLeave());
-});
-
     const recent = state.settings.recent.filter((x) => x !== p);
     await setSettings({ recent });
     renderSidebar();
@@ -1112,6 +1133,180 @@ function debugKey(cmd) {
   if (cmd === 'cursor') return startDebug(null, { runTo: state.editor.getPosition().lineNumber });
   return startDebug(null, { stopAtMain: true });
 }
+
+// ---------- поиск и замена ----------
+// Своя панель над редактором во всю ширину; совпадения ищет сам Monaco (model.findMatches), подсветка — декорациями
+const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
+const find = { open: false, matches: [], index: -1, decor: [], timer: null, origin: null, editing: false, ctx: null };
+const findPressed = (id) => $(id).getAttribute('aria-pressed') === 'true';
+
+function findOptions() {
+  const q = $('findInput').value;
+  if (!q) return null;
+  const regex = findPressed('findRegex');
+  if (regex) {
+    try {
+      new RegExp(q);
+    } catch {
+      return { bad: true };
+    }
+  }
+  return { q, regex, matchCase: findPressed('findCase'), word: findPressed('findWord') };
+}
+
+function runFind(keepIndex = false) {
+  const ed = state.editor;
+  const model = ed.getModel();
+  const o = findOptions();
+  const prev = find.matches[find.index]?.range;
+  find.matches = o && !o.bad
+    ? model.findMatches(o.q, false, o.regex, o.matchCase, o.word ? ed.getOption(monaco.editor.EditorOption.wordSeparators) : null, true, 5000)
+    : [];
+  const n = find.matches.length;
+  if (!n) {
+    find.index = -1;
+  } else if (keepIndex && prev) {
+    const i = find.matches.findIndex((m) => monaco.Range.compareRangesUsingStarts(m.range, prev) >= 0);
+    find.index = i < 0 ? 0 : i;
+  } else {
+    const from = find.origin || ed.getPosition();
+    const i = find.matches.findIndex((m) => monaco.Position.isBeforeOrEqual(from, m.range.getStartPosition()));
+    find.index = i < 0 ? 0 : i;
+  }
+  paintFind(!keepIndex);
+}
+
+function paintFind(reveal) {
+  const ed = state.editor;
+  find.decor = ed.deltaDecorations(find.decor, find.matches.map((m, i) => ({
+    range: m.range, options: { className: i === find.index ? 'find-current' : 'find-match', stickiness: 1 },
+  })));
+  const o = findOptions();
+  const n = find.matches.length;
+  $('findCount').textContent = !o ? '' : o.bad ? 'ошибка в выражении' : n ? `${find.index + 1} из ${n}` : 'не найдено';
+  $('findCount').classList.toggle('none', !!o && !n);
+  $('findInput').classList.toggle('bad', !!o && !n);
+  const cur = find.matches[find.index];
+  if (cur && reveal) {
+    ed.setSelection(cur.range);
+    ed.revealRangeInCenterIfOutsideViewport(cur.range);
+  }
+}
+
+function findStep(dir) {
+  const n = find.matches.length;
+  if (!n) return;
+  find.origin = null;
+  find.index = (find.index + dir + n) % n;
+  paintFind(true);
+}
+
+function openFind(withReplace) {
+  const ed = state.editor;
+  const sel = ed.getSelection();
+  const text = sel && !sel.isEmpty() && sel.startLineNumber === sel.endLineNumber ? ed.getModel().getValueInRange(sel) : '';
+  if (text) $('findInput').value = text;
+  find.open = true;
+  find.ctx?.set(true);
+  // свои подсветки Monaco (вхождения выделенного текста и слова под курсором) легли бы поверх найденного
+  ed.updateOptions({ selectionHighlight: false, occurrencesHighlight: 'off' });
+  find.origin = sel ? sel.getStartPosition() : ed.getPosition();
+  $('findBar').hidden = false;
+  if (withReplace) setReplaceVisible(true);
+  runFind();
+  const target = withReplace && $('findInput').value ? $('replaceInput') : $('findInput');
+  target.focus();
+  target.select();
+}
+
+function closeFind() {
+  if (!find.open) return;
+  find.open = false;
+  find.ctx?.set(false);
+  state.editor.updateOptions({ selectionHighlight: true, occurrencesHighlight: 'singleFile' });
+  find.matches = [];
+  find.decor = state.editor.deltaDecorations(find.decor, []);
+  $('findBar').hidden = true;
+  state.editor.focus();
+}
+
+function setReplaceVisible(on) {
+  $('replaceRow').hidden = !on;
+  $('findBar').classList.toggle('with-replace', on);
+}
+
+// Текст замены: в режиме регулярных выражений поддерживаются $1…$99, $& и $$
+function replacementFor(m) {
+  const r = $('replaceInput').value;
+  if (!findPressed('findRegex')) return r;
+  return r.replace(/\$(\$|&|\d{1,2})/g, (_, t) => (t === '$' ? '$' : t === '&' ? m.matches[0] : m.matches?.[+t] ?? ''));
+}
+
+function replaceOne() {
+  const m = find.matches[find.index];
+  if (!m) return;
+  const ed = state.editor;
+  find.editing = true;
+  ed.pushUndoStop();
+  ed.executeEdits('find', [{ range: m.range, text: replacementFor(m), forceMoveMarkers: true }]);
+  ed.pushUndoStop();
+  find.editing = false;
+  find.origin = ed.getModel().getPositionAt(ed.getModel().getOffsetAt(m.range.getStartPosition()) + replacementFor(m).length);
+  runFind();
+}
+
+function replaceAll() {
+  if (!find.matches.length) return;
+  const ed = state.editor;
+  const count = find.matches.length;
+  find.editing = true;
+  ed.pushUndoStop();
+  ed.executeEdits('find', find.matches.map((m) => ({ range: m.range, text: replacementFor(m) })));
+  ed.pushUndoStop();
+  find.editing = false;
+  runFind(true);
+  setStatus(`Заменено: ${count}`);
+}
+
+$('findInput').addEventListener('input', () => runFind());
+$('findInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    findStep(e.shiftKey ? -1 : 1);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeFind();
+  } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    $('findInput').select();
+  }
+});
+$('replaceInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (e.metaKey || e.ctrlKey) replaceAll();
+    else replaceOne();
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeFind();
+  }
+});
+['findCase', 'findWord', 'findRegex'].forEach((id) => {
+  $(id).onclick = () => {
+    $(id).setAttribute('aria-pressed', String(!findPressed(id)));
+    runFind();
+    $('findInput').focus();
+  };
+});
+$('findPrev').onclick = () => findStep(-1);
+$('findNext').onclick = () => findStep(1);
+$('findClose').onclick = closeFind;
+$('findToggle').onclick = () => {
+  setReplaceVisible($('replaceRow').hidden);
+  ($('replaceRow').hidden ? $('findInput') : $('replaceInput')).focus();
+};
+$('replaceOne').onclick = replaceOne;
+$('replaceAll').onclick = replaceAll;
 
 // ---------- инструменты ----------
 async function refreshCompiler() {

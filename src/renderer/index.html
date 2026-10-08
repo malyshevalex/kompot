@@ -52,6 +52,29 @@
 
   <main class="center">
     <div class="banner" id="banner" hidden></div>
+    <div class="findbar" id="findBar" hidden>
+      <div class="find-row">
+        <button class="btn find-toggle" data-variant="ghost" data-size="icon-sm" id="findToggle" aria-label="Замена" title="Замена"><span class="ic" data-ic="chevron"></span></button>
+        <div class="find-field">
+          <input class="input" id="findInput" placeholder="Найти" spellcheck="false" autocomplete="off">
+          <div class="find-opts">
+            <button class="find-opt" id="findCase" aria-pressed="false" title="С учётом регистра">Aa</button>
+            <button class="find-opt" id="findWord" aria-pressed="false" title="Слово целиком">ab</button>
+            <button class="find-opt" id="findRegex" aria-pressed="false" title="Регулярное выражение">.*</button>
+          </div>
+        </div>
+        <span class="find-count" id="findCount"></span>
+        <button class="btn" data-variant="ghost" data-size="icon-sm" id="findPrev" aria-label="Предыдущее" title="Предыдущее — Shift+Enter"><span class="ic" data-ic="arrowUp"></span></button>
+        <button class="btn" data-variant="ghost" data-size="icon-sm" id="findNext" aria-label="Следующее" title="Следующее — Enter"><span class="ic" data-ic="arrowDown"></span></button>
+        <button class="btn" data-variant="ghost" data-size="icon-sm" id="findClose" aria-label="Закрыть" title="Закрыть — Esc"><span class="ic" data-ic="x"></span></button>
+      </div>
+      <div class="find-row" id="replaceRow" hidden>
+        <span class="find-gap"></span>
+        <div class="find-field"><input class="input" id="replaceInput" placeholder="Заменить на" spellcheck="false" autocomplete="off"></div>
+        <button class="btn" data-variant="outline" data-size="sm" id="replaceOne" title="Заменить текущее — Enter">Заменить</button>
+        <button class="btn" data-variant="outline" data-size="sm" id="replaceAll" title="Заменить все — Ctrl+Enter">Заменить все</button>
+      </div>
+    </div>
     <div id="editor"></div>
     <div class="problems" id="problems" hidden>
       <div class="problems-head"><span class="chip ce">Ошибка компиляции</span><button class="btn" data-variant="ghost" data-size="icon-xs" id="problemsClose" title="Скрыть"><span class="ic" data-ic="x"></span></button></div>
