@@ -665,8 +665,21 @@ function setRunning(on) {
   // «Запустить» и «Стоп» стоят в одной ячейке: меняется только видимость, ширина и положение кнопок не прыгают
   $('runBtn').classList.toggle('off', on);
   $('stopBtn').classList.toggle('off', !on);
-  $('consoleInput').disabled = !(on && state.mode === 'console');
+  // Узнать, что программа именно ждёт ввода, извне нельзя. Поэтому поле включаем и фокусируем, только если
+  // программа работает дольше 250 мс: быстрые решения успевают завершиться, и поле не моргает.
+  clearTimeout(inputTimer);
+  const input = $('consoleInput');
+  if (!on) {
+    input.disabled = true;
+  } else if (state.mode === 'console') {
+    inputTimer = setTimeout(() => {
+      if (!state.running) return;
+      input.disabled = false;
+      input.focus();
+    }, 250);
+  }
 }
+let inputTimer;
 
 async function compile() {
   const model = state.editor.getModel();
@@ -784,7 +797,6 @@ async function runConsole() {
   consoleEl().innerHTML = '';
   setStatus('Программа работает · ввод внизу, Ctrl+D — конец ввода', 'busy');
   setRunning(true);
-  $('consoleInput').focus();
   const r = await K.runInteractive();
   setRunning(false);
   const ok = r.code === 0 && !r.signal;

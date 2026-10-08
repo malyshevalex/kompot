@@ -354,8 +354,15 @@ async function buildSource(source, debug = false) {
   return { ok: true, log, diagnostics: parseDiagnostics(log), seconds: (Date.now() - started) / 1000, exe, dir };
 }
 
+// Первый запуск свежей программы заметно медленнее: macOS и антивирус Windows проверяют новый файл.
+// Поэтому сразу после сборки запускаем её один раз с пустым вводом, вне замеров — и тесты, и консоль стартуют уже без задержки.
+const warmed = new Set();
 ipcMain.handle('build', async (_e, source) => {
   const r = await buildSource(source);
+  if (r.ok && lastBuild && !warmed.has(lastBuild.key)) {
+    await execute('', { timeLimit: 1, hardLimit: 1.5 });
+    warmed.add(lastBuild.key);
+  }
   delete r.exe;
   delete r.dir;
   return r;
@@ -671,11 +678,6 @@ function verdictOf(res, expected) {
 ipcMain.handle('run:tests', async (e, tests) => {
   if (!lastBuild) return [];
   const tl = settings.timeLimit;
-  // Первый запуск свежей программы заметно медленнее (проверка системой и антивирусом) — делаем его вне замера.
-  if (!lastBuild.warm && tests.length) {
-    await execute(tests[0].input, { timeLimit: tl, hardLimit: Math.min(3, tl * 2 + 0.5) });
-    lastBuild.warm = true;
-  }
   const results = [];
   for (let i = 0; i < tests.length; i++) {
     safeSend(e.sender, 'run:progress', { index: i, running: true });
