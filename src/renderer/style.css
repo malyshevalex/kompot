@@ -196,10 +196,14 @@ button { cursor: pointer; }
 .dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--tle); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--tle) 18%, transparent); }
 .btn.run { padding: 0 6px 0 12px; }
 .run-slot { display: grid; }
-.run-slot > .btn { grid-area: 1 / 1; justify-content: center; }
+.run-slot > .btn { grid-area: 1 / 1; justify-content: center; transition: none; }
 .run-slot > .btn.off { visibility: hidden; pointer-events: none; }
 /* компиляция: вместо ▶ крутится маленькое кольцо, надпись и ширина кнопки не меняются */
 .btn.busy .ic svg { display: none; }
+/* «Стоп» лежит поверх «Запустить»: фон непрозрачный, иначе синяя кнопка просвечивает */
+.run-slot > .btn[data-variant="destructive"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wa) 14%, transparent), color-mix(in srgb, var(--wa) 8%, transparent)), var(--background);
+}
 .btn.busy .ic::after { content: ""; width: 10px; height: 10px; margin: 1px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #ffffff; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .btn.run-debug { padding: 0 6px 0 10px; }
