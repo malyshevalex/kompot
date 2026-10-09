@@ -367,6 +367,9 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .sb-run.bad { color: var(--wa); }
 .sb-run.bad .dot { background: var(--wa); }
 .sb-run.debug .dot { background: var(--tle); }
+/* обновление: готово к установке или доступно для скачивания */
+.sb-update { color: var(--accent-c); font-weight: 500; }
+.sb-update .dot { background: var(--accent-c); box-shadow: 0 0 0 3px var(--accent-soft); }
 /* результат прошлого запуска, пока тест ждёт новой проверки */
 .test.stale .chip, .test.stale .test-metrics { opacity: 0.45; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-muted); }

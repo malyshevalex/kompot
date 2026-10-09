@@ -1134,6 +1134,16 @@ function debugKey(cmd) {
   return startDebug(null, { stopAtMain: true });
 }
 
+// ---------- обновления ----------
+// ready — скачано, поставится при перезапуске; available — переносная версия, обновить можно только вручную
+K.on('update:state', ({ state: st, version }) => {
+  const b = $('sbUpdate');
+  b.hidden = false;
+  $('sbUpdateText').textContent = st === 'ready' ? `Обновление ${version} готово — перезапустить` : `Доступна версия ${version} — скачать`;
+  b.title = st === 'ready' ? 'Kompot закроется и откроется уже новой версией' : 'Откроется страница релиза на GitHub';
+  b.onclick = () => (st === 'ready' ? K.installUpdate() : K.openReleases());
+});
+
 // ---------- поиск и замена ----------
 // Своя панель над редактором во всю ширину; совпадения ищет сам Monaco (model.findMatches), подсветка — декорациями
 const IS_MAC = navigator.platform.toUpperCase().includes('MAC');

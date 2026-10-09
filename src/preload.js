@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('kompot', {
   dbgStep: invoke('dbg:step'),
   dbgRunTo: invoke('dbg:runTo'),
   confirmSave: invoke('dialog:confirmSave'),
+  installUpdate: () => ipcRenderer.send('update:install'),
+  openReleases: () => ipcRenderer.send('update:open'),
   closeAck: () => ipcRenderer.send('app:close-ack'),
   closeDone: (ok) => ipcRenderer.send('app:close', ok),
   dbgInput: (text) => ipcRenderer.send('dbg:input', text),
@@ -49,7 +51,7 @@ contextBridge.exposeInMainWorld('kompot', {
   sendInput: (text) => ipcRenderer.send('console:input', text),
   sendEof: () => ipcRenderer.send('console:eof'),
   on: (channel, fn) => {
-    const allowed = ['run:progress', 'console:data', 'theme:system', 'compiler:progress', 'lsp:diagnostics', 'lsp:status', 'dbg:event', 'menu:action', 'app:close-request'];
+    const allowed = ['run:progress', 'console:data', 'theme:system', 'compiler:progress', 'lsp:diagnostics', 'lsp:status', 'dbg:event', 'menu:action', 'app:close-request', 'update:state'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, data) => fn(data));
   },
 });

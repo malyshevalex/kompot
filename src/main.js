@@ -17,12 +17,16 @@ app.setName('Kompot');
 // ---------- где лежат данные ----------
 // Всё держим внутри папки приложения (переносимый режим), если туда можно писать;
 // иначе — в стандартной папке данных пользователя.
+// Windows: установленная версия (есть деинсталлятор рядом с exe) или переносной zip
+const INSTALLED = IS_WIN && app.isPackaged && fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall Kompot.exe'));
+
 function dataDir() {
   if (process.env.KOMPOT_DATA) return process.env.KOMPOT_DATA;  // для отладки
   const candidates = [];
   // Переносная папка data рядом с Kompot.exe — только для zip под Windows.
-  // На macOS писать внутрь Kompot.app нельзя: это ломает подпись, и обновление приложения стёрло бы инструменты.
-  if (app.isPackaged && IS_WIN) candidates.push(path.join(path.dirname(process.execPath), 'data'));
+  // Установленная версия и macOS хранят данные в профиле: обновление заменяет папку программы целиком,
+  // а писать внутрь Kompot.app ещё и ломает подпись.
+  if (app.isPackaged && IS_WIN && !INSTALLED) candidates.push(path.join(path.dirname(process.execPath), 'data'));
   candidates.push(path.join(app.getPath('userData'), 'data'));
   for (const dir of candidates) {
     try {
@@ -136,7 +140,34 @@ ipcMain.handle('dialog:confirmSave', async (e, name) => {
   return ids[response];
 });
 
-app.whenReady().then(createWindow);
+// ---------- обновления из релизов GitHub ----------
+// Установленная версия на Windows и подписанная на macOS скачивают обновление сами и ставят его при перезапуске.
+// Переносной zip заменить себя не может — он только сообщает о новой версии со ссылкой на релиз.
+// Сборки для просмотра (npm run dev:mac) и запуск из исходников обновления не проверяют.
+const RELEASES_URL = 'https://github.com/malyshevalex/kompot/releases/latest';
+function setupUpdates() {
+  const meta = require('../package.json');
+  if (!app.isPackaged || meta.kompotDev || process.env.KOMPOT_DEMO) return;
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.logger = null;
+  autoUpdater.autoDownload = !IS_WIN || INSTALLED;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-available', (info) => {
+    if (!autoUpdater.autoDownload) toWin('update:state', { state: 'available', version: info.version });
+  });
+  autoUpdater.on('update-downloaded', (info) => toWin('update:state', { state: 'ready', version: info.version }));
+  autoUpdater.on('error', () => {});  // нет сети и т. п. — тихо, попробуем в следующий раз
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(check, 5000);
+  setInterval(check, 6 * 3600 * 1000);
+}
+ipcMain.on('update:install', () => require('electron-updater').autoUpdater.quitAndInstall());
+ipcMain.on('update:open', () => shell.openExternal(RELEASES_URL));
+
+app.whenReady().then(() => {
+  createWindow();
+  setupUpdates();
+});
 app.on('window-all-closed', () => app.quit());
 
 // ---------- настройки и файлы ----------

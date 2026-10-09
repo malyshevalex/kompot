@@ -8,15 +8,17 @@
   "scripts": {
     "start": "electron .",
     "icon": "electron scripts/render-icon.js",
-    "dev:mac": "sh scripts/guard.sh && electron-builder --mac dir --arm64 -c.mac.identity=null -c.mac.notarize=false",
+    "dev:mac": "sh scripts/guard.sh && electron-builder --mac dir --arm64 -c.mac.identity=null -c.mac.notarize=false -c.extraMetadata.kompotDev=true",
     "dist:mac": "sh scripts/guard.sh && APPLE_KEYCHAIN_PROFILE=kletka electron-builder --mac dmg zip --arm64 && sh scripts/notarize-dmg.sh",
     "dist:win": "electron-builder --win zip --x64",
-    "dist": "npm run dist:mac && npm run dist:win"
+    "dist": "npm run dist:mac && npm run dist:win",
+    "release": "sh scripts/release.sh"
   },
   "dependencies": {
     "@fontsource/geist": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "basecoat-css": "^1.0.2",
+    "electron-updater": "^6.8.9",
     "monaco-editor": "^0.57.0"
   },
   "devDependencies": {
@@ -75,6 +77,12 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
           "target": "zip",
           "arch": [
             "x64"
@@ -89,6 +97,23 @@
           "to": "7za.exe"
         }
       ]
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "malyshevalex",
+        "repo": "kompot",
+        "releaseType": "release"
+      }
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Kompot-Setup-${version}.${ext}",
+      "shortcutName": "Компот",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
     }
   }
 }
