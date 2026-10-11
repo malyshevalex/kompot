@@ -34,6 +34,7 @@ APPLE_KEYCHAIN_PROFILE=kletka npx electron-builder --mac dmg zip --arm64 --publi
 npx electron-builder --win nsis zip --x64 --publish never
 sh scripts/notarize-dmg.sh
 spctl -a -t install release/Kompot-"$VERSION"-arm64.dmg
+node scripts/fix-dmg-yml.js release/latest-mac.yml release/Kompot-"$VERSION"-arm64.dmg
 # без app-update.yml собранная версия не сможет обновляться
 for f in release/mac-arm64/Kompot.app/Contents/Resources/app-update.yml release/win-unpacked/resources/app-update.yml; do
   [ -f "$f" ] || { echo "Нет $f — релиз не публикую." >&2; exit 1; }
