@@ -42,6 +42,7 @@
       <button class="btn side-btn" data-variant="ghost" id="newBtn" title="Новый файл"><span class="ic" data-ic="plus"></span><span>Новый</span><kbd class="kbd" data-key="N"></kbd></button>
       <button class="btn side-btn" data-variant="ghost" id="openBtn" title="Открыть файл"><span class="ic" data-ic="open"></span><span>Открыть</span><kbd class="kbd" data-key="O"></kbd></button>
       <button class="btn side-btn" data-variant="ghost" id="saveBtn" title="Сохранить"><span class="ic" data-ic="save"></span><span>Сохранить</span><kbd class="kbd" data-key="S"></kbd></button>
+      <button class="btn side-btn" data-variant="ghost" id="saveAsBtn" title="Сохранить в другой файл"><span class="ic" data-ic="saveAs"></span><span>Сохранить как…</span><kbd class="kbd" data-key="S" data-shift></kbd></button>
     </nav>
     <div class="side-section">
       <div class="side-title">Недавние</div>
@@ -135,21 +136,43 @@
 </div>
 
 <div class="modal" id="settingsModal" hidden>
-  <div class="modal-card">
+  <div class="modal-card settings">
     <div class="modal-head"><h2>Настройки</h2><button class="btn" data-variant="ghost" data-size="icon-sm" data-close title="Закрыть"><span class="ic" data-ic="x"></span></button></div>
-    <div class="form">
-      <span class="label">Тема</span>
-      <div class="tabs"><nav id="themeSeg" role="tablist" aria-label="Тема"><button role="tab" data-theme="system">Как в системе</button><button role="tab" data-theme="light">Светлая</button><button role="tab" data-theme="dark">Тёмная</button></nav></div>
-      <label class="label" for="setTL">Ограничение времени</label><div class="unit"><input class="input" id="setTL" type="number" min="0.1" step="0.1"><span>с</span></div>
-      <label class="label" for="setML">Ограничение памяти</label><div class="unit"><input class="input" id="setML" type="number" min="16" step="16"><span>МБ</span></div>
-      <label class="label" for="setStack">Размер стека</label><div class="unit"><input class="input" id="setStack" type="number" min="8" step="8"><span>МБ</span></div>
-      <label class="label" for="setFlags">Флаги компилятора</label><div class="unit wide"><input class="input" id="setFlags" spellcheck="false"></div>
-      <label class="label" for="setFont">Размер шрифта</label><div class="unit"><input class="input" id="setFont" type="number" min="10" max="28"><span>пт</span></div>
-      <span class="label">Компилятор</span>
-      <div class="compiler-box"><div id="compilerFull" class="mono"></div></div>
-      <span class="label">Подсказки по коду</span>
-      <div class="compiler-box"><div id="lspFull" class="mono"></div><div class="row"><button class="btn" data-variant="outline" data-size="sm" id="lspInstall" hidden>Установить clangd</button></div></div>
-      <span class="label">Данные</span><div class="mono muted" id="dataPath"></div>
+    <div class="tabs set-tabs"><nav id="setTabs" role="tablist" aria-label="Разделы настроек">
+      <button role="tab" id="tabLook" data-tab="look" aria-controls="panelLook">Оформление</button>
+      <button role="tab" id="tabRun" data-tab="run" aria-controls="panelRun">Запуск</button>
+      <button role="tab" id="tabCompiler" data-tab="compiler" aria-controls="panelCompiler">Компилятор</button>
+      <button role="tab" id="tabAbout" data-tab="about" aria-controls="panelAbout">О программе</button>
+    </nav></div>
+    <div class="set-panels">
+      <div class="form" role="tabpanel" id="panelLook" data-panel="look" aria-labelledby="tabLook">
+        <span class="label">Тема</span>
+        <div class="tabs"><nav id="themeSeg" role="tablist" aria-label="Тема"><button role="tab" data-theme="system">Как в системе</button><button role="tab" data-theme="light">Светлая</button><button role="tab" data-theme="dark">Тёмная</button></nav></div>
+        <label class="label" for="setFont">Размер шрифта</label><div class="unit"><input class="input" id="setFont" type="number" min="10" max="28"><span>пт</span></div>
+        <label class="label" for="setLig">Лигатуры</label><div class="lig"><input class="input" id="setLig" type="checkbox" role="switch"><span class="lig-sample" aria-hidden="true">!= &lt;= -&gt; &amp;&amp; ::</span></div>
+      </div>
+      <div class="form" role="tabpanel" id="panelRun" data-panel="run" aria-labelledby="tabRun">
+        <label class="label" for="setTL">Ограничение времени</label><div class="unit"><input class="input" id="setTL" type="number" min="0.1" step="0.1"><span>с</span></div>
+        <label class="label" for="setML">Ограничение памяти</label><div class="unit"><input class="input" id="setML" type="number" min="16" step="16"><span>МБ</span></div>
+        <label class="label" for="setStack">Размер стека</label><div class="unit"><input class="input" id="setStack" type="number" min="8" step="8"><span>МБ</span></div>
+        <p class="set-note">Время и память проверяются на каждом тесте, как на олимпиаде: при превышении — вердикт TLE или MLE.</p>
+      </div>
+      <div class="form" role="tabpanel" id="panelCompiler" data-panel="compiler" aria-labelledby="tabCompiler">
+        <span class="label">Компилятор</span>
+        <div class="compiler-box"><div id="compilerFull" class="mono"></div><div class="row"><button class="btn" data-variant="outline" data-size="sm" id="compilerInstall" hidden>Установить</button></div></div>
+        <label class="label" for="setFlags">Флаги</label><div class="unit wide"><input class="input" id="setFlags" spellcheck="false"></div>
+        <span class="label">Подсказки по коду</span>
+        <div class="compiler-box"><div id="lspFull" class="mono"></div><div class="row"><button class="btn" data-variant="outline" data-size="sm" id="lspInstall" hidden>Установить clangd</button></div></div>
+        <span class="label">Отладчик</span>
+        <div class="compiler-box"><div id="dbgFull" class="mono"></div></div>
+      </div>
+      <div class="form" role="tabpanel" id="panelAbout" data-panel="about" aria-labelledby="tabAbout">
+        <span class="label">Обновления</span>
+        <div class="upd"><span id="updText"></span><button class="btn" data-variant="outline" data-size="sm" id="updBtn" hidden></button></div>
+        <span class="label">Папка данных</span>
+        <div class="compiler-box"><div class="mono muted" id="dataPath"></div><div class="row"><button class="btn" data-variant="outline" data-size="sm" id="dataOpen">Открыть папку</button></div></div>
+        <p class="set-note">Здесь компилятор, подсказки, отладчик, тесты к решениям и настройки. Сами решения лежат там, где вы их сохранили.</p>
+      </div>
     </div>
   </div>
 </div>

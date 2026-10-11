@@ -164,12 +164,12 @@ button { cursor: pointer; }
 }
 
 /* поля ввода */
-.input, .io, .console-input input {
+.input:not([role=switch]), .io, .console-input input {
   border: 1px solid var(--input); border-radius: 8px; background: var(--inset); color: var(--foreground);
   box-shadow: inset 0 1px 2px var(--lo);
 }
-.input { height: 32px; padding: 0 10px; font: 12.5px var(--mono); }
-.input:focus, textarea.io:focus { outline: none; border-color: var(--ring); box-shadow: inset 0 1px 2px var(--lo), 0 0 0 3px var(--ring-soft); }
+.input:not([role=switch]) { height: 32px; padding: 0 10px; font: 12.5px var(--mono); }
+.input:not([role=switch]):focus, textarea.io:focus { outline: none; border-color: var(--ring); box-shadow: inset 0 1px 2px var(--lo), 0 0 0 3px var(--ring-soft); }
 .label { color: var(--fg-soft); font-size: 13px; font-weight: 500; }
 
 /* ---------- верхняя панель ---------- */
@@ -213,11 +213,13 @@ button { cursor: pointer; }
 
 /* ---------- боковая панель ---------- */
 .files { background: var(--chrome); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-.side-actions { display: grid; gap: 1px; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.side-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 10px 8px; border-bottom: 1px solid var(--border); }
 .btn.side-btn { justify-content: flex-start; width: 100%; height: 32px; padding: 0 8px; gap: 9px; border-radius: 7px; font-size: 13px; }
 .btn.side-btn .ic { color: var(--fg-muted); }
 .btn.side-btn:hover .ic { color: var(--accent-c); }
-.btn.side-btn .kbd { margin-left: auto; background: transparent; box-shadow: none; color: var(--fg-muted); opacity: 0.8; }
+.btn.side-btn .kbd { margin-left: auto; flex-shrink: 0; background: transparent; box-shadow: none; color: var(--fg-muted); opacity: 0.8; }
+.btn.side-btn .kbd[hidden] { display: none; }
+.btn.side-btn > span:not(.ic) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .side-section { flex: 1; padding: 12px 8px 6px; min-height: 0; display: flex; flex-direction: column; }
 .side-title { padding: 0 8px 6px; font-size: 12px; font-weight: 500; color: var(--fg-muted); }
 .file-list { list-style: none; margin: 0; padding: 0; overflow: auto; display: grid; gap: 1px; align-content: start; }
@@ -388,11 +390,29 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .modal-card h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
 .modal-card p { color: var(--fg-soft); margin: 0 0 18px; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.form { display: grid; grid-template-columns: 150px 1fr; gap: 12px 16px; align-items: center; }
+/* подписи по верху строки: у компилятора и папок значение в несколько строк */
+.form { display: grid; grid-template-columns: 150px 1fr; gap: 12px 16px; align-items: start; }
+.form > .label { line-height: 20px; padding: 6px 0; }
+.form > .tabs { margin-top: -2px; }
 .unit { display: flex; align-items: center; gap: 8px; color: var(--fg-muted); }
 .unit .input { width: 110px; }
 .unit.wide .input { width: 100%; }
-.compiler-box { display: grid; gap: 8px; }
+.lig { display: flex; align-items: center; gap: 12px; min-height: 32px; }
+.lig input { cursor: pointer; }
+.lig-sample { font: 14px var(--mono); color: var(--fg-muted); }
+.lig:has(input:not(:checked)) .lig-sample { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+.compiler-box { display: grid; gap: 8px; padding-top: 7px; }
+.compiler-box .mono { white-space: pre-line; word-break: normal; overflow-wrap: anywhere; line-height: 1.5; }
+/* настройки по разделам: все разделы лежат в одной клетке сетки, поэтому окно не меняет высоту при переключении */
+.modal-card.settings { width: min(600px, 92vw); }
+.set-tabs { margin-bottom: 20px; }
+.set-tabs [role=tablist] { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; }
+.set-panels { display: grid; }
+.set-panels > [role=tabpanel] { grid-area: 1 / 1; align-content: start; }
+.set-panels > [role=tabpanel]:not(.on) { visibility: hidden; }
+.modal-card .set-note { grid-column: 1 / -1; margin: 2px 0 0; color: var(--fg-muted); font-size: 12.5px; line-height: 1.5; }
+.upd { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+#updText { color: var(--fg-soft); font-size: 13px; }
 
 .flash {
   position: fixed; left: 50%; bottom: 40px; transform: translate(-50%, 8px); opacity: 0; pointer-events: none; z-index: 30;

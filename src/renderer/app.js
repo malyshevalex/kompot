@@ -10,6 +10,7 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   open: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
   save: '<path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z M8 4v5h7V4 M8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  saveAs: '<path d="M10.5 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h10l3 3v3.5 M8 4v5h7V4 M8 20v-6h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 20.5l.5-2.5 4.8-4.8a1.4 1.4 0 0 1 2 2L16.5 20z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
   sun: '<circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   gear: '<path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.7 7.7 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
@@ -54,6 +55,8 @@ const state = {
 };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Длинные пути переносим после разделителя папок, а не посреди имени
+const showPath = (el, text) => { el.innerHTML = esc(text).replace(/[\\/]/g, '$&<wbr>'); };
 const basename = (p) => p.split(/[\\/]/).pop();
 const dirname = (p) => p.replace(/[\\/][^\\/]*$/, '');
 const fmtTime = (t) => (t == null ? '' : t < 10 ? `${t.toFixed(3)} с` : `${t.toFixed(1)} с`);
@@ -214,7 +217,7 @@ function initMonaco() {
       applyTheme();
       state.editor = monaco.editor.create($('editor'), {
         language: 'cpp', fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontWeight: '400', fontSize: state.settings.fontSize,
-        fontLigatures: true, lineHeight: 1.6, minimap: { enabled: false }, scrollBeyondLastLine: false,
+        fontLigatures: state.settings.ligatures, lineHeight: 1.6, minimap: { enabled: false }, scrollBeyondLastLine: false,
         smoothScrolling: false, cursorBlinking: 'solid', cursorSmoothCaretAnimation: 'off', renderLineHighlight: 'all',
         suggest: { preview: false, showWords: false, localityBonus: true }, quickSuggestionsDelay: 60, suggestFontSize: 13, suggestLineHeight: 22,
         wordBasedSuggestions: 'currentDocument', matchBrackets: 'always', 'semanticHighlighting.enabled': true, glyphMargin: true,
@@ -388,7 +391,7 @@ function showLspStatus(st) {
   const text = { ready: 'подсказки', starting: 'подсказки запускаются…', missing: 'подсказки не установлены', off: 'подсказки выключены' }[st.status] || 'подсказки';
   $('lspDot').className = `dot ${st.status === 'ready' ? 'ready' : st.status === 'starting' ? 'starting' : 'missing'}`;
   $('lspText').textContent = text;
-  $('lspFull').textContent = st.status === 'ready' || st.status === 'starting' ? `clangd\n${st.path || ''}` : 'clangd не найден';
+  showPath($('lspFull'), st.status === 'ready' || st.status === 'starting' ? `clangd\n${st.path || ''}` : 'clangd не найден');
   $('lspInstall').hidden = !(st.status === 'missing' && st.canInstall);
   state.editor?.updateOptions({ wordBasedSuggestions: st.status === 'ready' ? 'off' : 'currentDocument' });
   if (st.status === 'ready') {
@@ -506,7 +509,6 @@ async function save(as = false, quiet = false) {
     return false;
   }
   const isNew = target !== state.file;
-  if (isNew && state.file) await K.moveTests(state.file, target);
   state.file = target;
   state.dirty = false;
   $('dirty').hidden = true;
@@ -519,6 +521,18 @@ async function save(as = false, quiet = false) {
   }
   if (!quiet) toast('Сохранено');
   return true;
+}
+
+// Узкая боковая панель (или длинное Ctrl+Shift+S на Windows): подсказку с клавишами прячем в всплывающую подсказку
+function fitSideKeys() {
+  document.querySelectorAll('.side-btn').forEach((b) => {
+    const k = b.querySelector('kbd');
+    const label = k.previousElementSibling;
+    b.dataset.title ??= b.title;
+    k.hidden = false;
+    k.hidden = label.scrollWidth > label.clientWidth;
+    b.title = k.hidden ? `${b.dataset.title} (${k.textContent})` : b.dataset.title;
+  });
 }
 
 async function renderSidebar() {
@@ -936,6 +950,7 @@ function pickDebugInput(index) {
 
 async function startDebug(index = null, opts = {}) {
   if (dbg.active || state.running) return;
+  if (state.file && state.dirty) await save(false, true);  // как и перед запуском (F5)
   if (!state.compiler || state.compiler.missing) return showOnboarding();
   const info = await K.dbgInfo();
   if (!info.path) {
@@ -1136,13 +1151,40 @@ function debugKey(cmd) {
 
 // ---------- обновления ----------
 // ready — скачано, поставится при перезапуске; available — переносная версия, обновить можно только вручную
-K.on('update:state', ({ state: st, version }) => {
-  const b = $('sbUpdate');
-  b.hidden = false;
-  $('sbUpdateText').textContent = st === 'ready' ? `Обновление ${version} готово — перезапустить` : `Доступна версия ${version} — скачать`;
-  b.title = st === 'ready' ? 'Kompot закроется и откроется уже новой версией' : 'Откроется страница релиза на GitHub';
-  b.onclick = () => (st === 'ready' ? K.installUpdate() : K.openReleases());
-});
+// ---------- обновления ----------
+let update = { state: 'off' };
+
+function showUpdate(u) {
+  update = { ...update, ...u };
+  const { state: st, version: v, current } = update;
+  const text = {
+    off: `Компот ${current} — тестовая сборка, без обновлений`,
+    idle: `Компот ${current}`,
+    checking: 'Проверяю…',
+    latest: `Компот ${current} — последняя версия`,
+    downloading: `Скачиваю версию ${v}${update.percent != null ? ` — ${update.percent}%` : ''}…`,
+    available: `Доступна версия ${v}`,
+    ready: `Версия ${v} скачана`,
+    error: update.during === 'download' ? 'Не удалось скачать обновление. Есть ли интернет?' : 'Не удалось проверить обновления. Есть ли интернет?',
+  }[st];
+  const btn = { idle: 'Проверить', latest: 'Проверить', error: 'Проверить', available: 'Скачать', ready: 'Перезапустить' }[st];
+  $('updText').textContent = text;
+  const b = $('updBtn');
+  b.hidden = !btn;
+  b.textContent = btn || '';
+  b.dataset.variant = st === 'ready' ? 'primary' : 'outline';
+  b.onclick = st === 'ready' ? K.installUpdate : st === 'available' ? K.openReleases : () => K.checkUpdates().then(showUpdate);
+
+  // в строке состояния — только то, что ждёт действия
+  if (st === 'ready' || st === 'available') {
+    const sb = $('sbUpdate');
+    sb.hidden = false;
+    $('sbUpdateText').textContent = st === 'ready' ? `Обновление ${v} готово — перезапустить` : `Доступна версия ${v} — скачать`;
+    sb.title = st === 'ready' ? 'Kompot закроется и откроется уже новой версией' : 'Откроется страница релиза на GitHub';
+    sb.onclick = st === 'ready' ? K.installUpdate : K.openReleases;
+  }
+}
+K.on('update:state', showUpdate);
 
 // ---------- поиск и замена ----------
 // Своя панель над редактором во всю ширину; совпадения ищет сам Monaco (model.findMatches), подсветка — декорациями
@@ -1331,7 +1373,7 @@ async function refreshCompiler() {
     dot.className = 'dot ready';
     const short = (c.version.match(/\d+\.\d+\.\d+/) || [c.version])[0];
     $('compilerText').textContent = `GCC ${short}`;
-    $('compilerFull').textContent = `${c.version}\n${c.path}`;
+    showPath($('compilerFull'), `${c.version}\n${c.path}`);
   }
 }
 
@@ -1427,18 +1469,54 @@ K.on('compiler:progress', (p) => {
 });
 
 // ---------- настройки ----------
-function openSettings() {
+// Разделы настроек; окно открывается на последнем, а из строки состояния — сразу на нужном
+let settingsTab = 'look';
+function showSettingsTab(tab) {
+  settingsTab = tab;
+  document.querySelectorAll('#setTabs [role=tab]').forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll('.set-panels > [role=tabpanel]').forEach((p) => p.classList.toggle('on', p.dataset.panel === tab));
+}
+
+function openSettings(tab = settingsTab) {
   const s = state.settings;
   $('setTL').value = s.timeLimit;
   $('setML').value = s.memoryLimit;
   $('setStack').value = s.stackMb;
   $('setFlags').value = s.flags;
   $('setFont').value = s.fontSize;
+  $('setLig').checked = s.ligatures;
   applyTheme();
+  showSettingsTab(tab);
   $('settingsModal').hidden = false;
+  $('compilerInstall').hidden = !state.compiler?.missing;
+  K.updateInfo().then(showUpdate);
+  K.paths().then((p) => showPath($('dataPath'), p.data));
+  K.dbgInfo().then((d) => {
+    showPath($('dbgFull'), d.path ? `lldb-dap\n${d.path}` : d.canInstall ? 'скачается при первой отладке' : 'не найден');
+  });
 }
 
 function bindSettings() {
+  const tabs = [...document.querySelectorAll('#setTabs [role=tab]')];
+  tabs.forEach((b, i) => {
+    b.onclick = () => showSettingsTab(b.dataset.tab);
+    b.onkeydown = (e) => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (!d) return;
+      const next = tabs[(i + d + tabs.length) % tabs.length];
+      showSettingsTab(next.dataset.tab);
+      next.focus();
+    };
+  });
+  $('compilerInstall').onclick = () => {
+    $('settingsModal').hidden = true;
+    showOnboarding();
+  };
+  $('dataOpen').onclick = () => K.openData();
   const num = (id, key, min) => {
     $(id).onchange = async () => {
       const v = parseFloat($(id).value);
@@ -1453,6 +1531,11 @@ function bindSettings() {
   num('setML', 'memoryLimit', 16);
   num('setStack', 'stackMb', 8);
   num('setFont', 'fontSize', 10);
+  $('setLig').onchange = async () => {
+    const on = $('setLig').checked;
+    await setSettings({ ligatures: on });
+    state.editor.updateOptions({ fontLigatures: on });
+  };
   $('setFlags').onchange = () => setSettings({ flags: $('setFlags').value.trim() || '-std=gnu++17 -O2 -Wall' });
   document.querySelectorAll('#themeSeg button').forEach((b) => {
     b.onclick = async () => {
@@ -1504,7 +1587,11 @@ async function main() {
   state.settings = await K.settings();
   const s = state.settings;
   document.body.classList.add(`platform-${s.platform}`);
-  document.querySelectorAll('kbd[data-key]').forEach((k) => { k.textContent = `${s.platform === 'darwin' ? '⌘' : 'Ctrl+'}${k.dataset.key}`; });
+  document.querySelectorAll('kbd[data-key]').forEach((k) => {
+    const shift = k.hasAttribute('data-shift');
+    k.textContent = s.platform === 'darwin' ? `${shift ? '⇧' : ''}⌘${k.dataset.key}` : `Ctrl+${shift ? 'Shift+' : ''}${k.dataset.key}`;
+  });
+  new ResizeObserver(fitSideKeys).observe(document.querySelector('.side-actions'));
   document.documentElement.style.setProperty('--sidebar-w', `${s.sidebar}px`);
   document.documentElement.style.setProperty('--panel-w', `${s.panel}px`);
   paintIcons();
@@ -1545,6 +1632,7 @@ async function main() {
   $('newBtn').onclick = newFile;
   $('openBtn').onclick = openFile;
   $('saveBtn').onclick = () => save();
+  $('saveAsBtn').onclick = () => save(true);
   $('addTestBtn').onclick = addTest;
   $('importBtn').onclick = importTests;
   $('clearTestsBtn').onclick = async () => {
@@ -1564,10 +1652,10 @@ async function main() {
     await setSettings({ theme: dark ? 'light' : 'dark' });
     applyTheme();
   };
-  $('settingsBtn').onclick = openSettings;
-  $('sbCompiler').onclick = openSettings;
-  $('sbLimits').onclick = openSettings;
-  $('sbLsp').onclick = openSettings;
+  $('settingsBtn').onclick = () => openSettings();
+  $('sbCompiler').onclick = () => openSettings('compiler');
+  $('sbLimits').onclick = () => openSettings('run');
+  $('sbLsp').onclick = () => openSettings('compiler');
   $('lspInstall').onclick = async () => {
     $('lspInstall').disabled = true;
     $('lspInstall').textContent = 'Скачивание…';

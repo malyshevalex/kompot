@@ -49,7 +49,7 @@ const SEVEN_ZIP = app.isPackaged ? path.join(RES, IS_WIN ? '7za.exe' : '7za') : 
 if (!IS_WIN) try { fs.chmodSync(SEVEN_ZIP, 0o755); } catch {}
 
 const DEFAULTS = {
-  theme: 'system', fontSize: 15, timeLimit: 1, memoryLimit: 256, stackMb: 64,
+  theme: 'system', fontSize: 15, ligatures: true, timeLimit: 1, memoryLimit: 256, stackMb: 64,
   flags: '-std=gnu++17 -O2 -Wall', folder: '', file: '', recent: [],
   sidebar: 230, panel: 400, mode: 'tests',
 };
@@ -145,23 +145,44 @@ ipcMain.handle('dialog:confirmSave', async (e, name) => {
 // Переносной zip заменить себя не может — он только сообщает о новой версии со ссылкой на релиз.
 // Сборки для просмотра (npm run dev:mac) и запуск из исходников обновления не проверяют.
 const RELEASES_URL = 'https://github.com/malyshevalex/kompot/releases/latest';
+let updater = null;
+// off — обновления выключены; idle, checking, latest, downloading, available (только переносной zip), ready, error
+let update = { state: 'off' };
+function setUpdate(next) {
+  update = next;
+  toWin('update:state', update);
+}
 function setupUpdates() {
   const meta = require('../package.json');
   if (!app.isPackaged || meta.kompotDev || process.env.KOMPOT_DEMO) return;
-  const { autoUpdater } = require('electron-updater');
-  autoUpdater.logger = null;
-  autoUpdater.autoDownload = !IS_WIN || INSTALLED;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('update-available', (info) => {
-    if (!autoUpdater.autoDownload) toWin('update:state', { state: 'available', version: info.version });
-  });
-  autoUpdater.on('update-downloaded', (info) => toWin('update:state', { state: 'ready', version: info.version }));
-  autoUpdater.on('error', () => {});  // нет сети и т. п. — тихо, попробуем в следующий раз
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
-  setTimeout(check, 5000);
-  setInterval(check, 6 * 3600 * 1000);
+  updater = require('electron-updater').autoUpdater;
+  updater.logger = null;
+  updater.autoDownload = !IS_WIN || INSTALLED;
+  updater.autoInstallOnAppQuit = true;
+  update = { state: 'idle' };
+  updater.on('update-not-available', () => setUpdate({ state: 'latest' }));
+  updater.on('update-available', (info) => setUpdate({ state: updater.autoDownload ? 'downloading' : 'available', version: info.version }));
+  updater.on('download-progress', (p) => setUpdate({ state: 'downloading', version: update.version, percent: Math.floor(p.percent) }));
+  updater.on('update-downloaded', (info) => setUpdate({ state: 'ready', version: info.version }));
+  // нет сети и т. п.: фоновая проверка просто попробует в следующий раз, а в настройках видно, что не вышло
+  updater.on('error', () => setUpdate({ state: 'error', during: update.state === 'downloading' ? 'download' : 'check', version: update.version }));
+  const auto = () => Date.now() - lastCheck > 60 * 1000 && checkUpdates();  // только что проверяли вручную — не повторяем
+  setTimeout(auto, 5000);
+  setInterval(auto, 6 * 3600 * 1000);
 }
-ipcMain.on('update:install', () => require('electron-updater').autoUpdater.quitAndInstall());
+let lastCheck = 0;
+function checkUpdates() {
+  if (!updater || ['checking', 'downloading', 'ready'].includes(update.state)) return;
+  lastCheck = Date.now();
+  setUpdate({ state: 'checking', version: update.version });
+  updater.checkForUpdates().catch(() => {});
+}
+ipcMain.handle('update:get', () => ({ ...update, current: app.getVersion() }));
+ipcMain.handle('update:check', () => {
+  checkUpdates();
+  return { ...update, current: app.getVersion() };
+});
+ipcMain.on('update:install', () => updater && updater.quitAndInstall());
 ipcMain.on('update:open', () => shell.openExternal(RELEASES_URL));
 
 app.whenReady().then(() => {
@@ -215,9 +236,6 @@ ipcMain.handle('fs:write', (_e, file, text) => {
   } catch (err) {
     return { error: String(err.message || err) };
   }
-});
-ipcMain.handle('tests:move', (_e, from, to) => {
-  if (fs.existsSync(testsFile(from))) fs.renameSync(testsFile(from), testsFile(to));
 });
 ipcMain.handle('fs:create', (_e, folder, name, text) => {
   const file = path.join(folder, name);
@@ -822,3 +840,4 @@ ipcMain.handle('run:stop', () => {
 });
 
 ipcMain.handle('app:paths', () => ({ data: DATA, build: BUILD }));
+ipcMain.on('app:openData', () => shell.openPath(DATA));
