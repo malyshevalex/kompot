@@ -29,7 +29,9 @@ if GH_TOKEN="$TOKEN" gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
 fi
 
 for i in 1 2 3; do rm -rf release 2>/dev/null; [ ! -e release ] && break; sleep 1; done
-APPLE_KEYCHAIN_PROFILE=kletka npx electron-builder --mac dmg zip --arm64 --win nsis zip --x64 --publish never
+# Платформы собираются отдельно: флаги архитектуры в одной команде применились бы к обеим (Windows ARM, Intel Mac)
+APPLE_KEYCHAIN_PROFILE=kletka npx electron-builder --mac dmg zip --arm64 --publish never
+npx electron-builder --win nsis zip --x64 --publish never
 sh scripts/notarize-dmg.sh
 spctl -a -t install release/Kompot-"$VERSION"-arm64.dmg
 # без app-update.yml собранная версия не сможет обновляться
