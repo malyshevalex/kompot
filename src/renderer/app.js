@@ -34,11 +34,15 @@ Object.assign(ICONS, ICONS_EXTRA);
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 const paintIcons = (root = document) => root.querySelectorAll('[data-ic]').forEach((el) => { el.innerHTML = icon(el.dataset.ic); });
 
+// Новый файл: сразу с быстрым вводом-выводом, курсор встаёт на пустую строку после cin.tie
 const TEMPLATE = `#include <iostream>
 
 using namespace std;
 
 int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+    
     return 0;
 }
 `;
@@ -431,9 +435,11 @@ function setDocument(text, file) {
   $('problems').hidden = true;
   syncNow();
   if (window.monaco && dbg) renderBreakpoints();
-  const line = text.split('\n').findIndex((l) => /^\s*$/.test(l) && text.includes('cin.tie'));
+  const lines = text.split('\n');
+  const tie = lines.findIndex((l) => l.includes('cin.tie'));
+  const line = tie < 0 ? -1 : lines.findIndex((l, i) => i > tie && /^\s*$/.test(l));
   state.editor.focus();
-  if (!file && line > 0) state.editor.setPosition({ lineNumber: line + 1, column: 5 });
+  if (!file && line > 0) state.editor.setPosition({ lineNumber: line + 1, column: lines[line].length + 1 });
 }
 
 async function confirmLeave() {
