@@ -125,7 +125,8 @@ async function setSettings(patch) {
 
 // ---------- Monaco ----------
 function defineThemes() {
-  // Цвета кода в тон интерфейсу: нейтральный фон shadcn, функции — янтарные, типы — бирюзовые, ключевые слова — фиолетовые
+  // Цвета кода — схема One (Atom One Light / One Dark) на нейтральном фоне shadcn: ключевые слова фиолетовые, функции синие,
+  // типы янтарные. Красный из оригинала (поля, параметры) заменён: поля бирюзовые, параметры — курсивом цвета текста
   const rules = (c) => [
     { token: 'comment', foreground: c.comment, fontStyle: 'italic' },
     { token: 'keyword', foreground: c.keyword }, { token: 'keyword.directive', foreground: c.macro }, { token: 'modifier', foreground: c.keyword },
@@ -134,19 +135,25 @@ function defineThemes() {
     { token: 'concept', foreground: c.type }, { token: 'number', foreground: c.number }, { token: 'enumMember', foreground: c.number },
     { token: 'string', foreground: c.string }, { token: 'delimiter', foreground: c.punct }, { token: 'operator', foreground: c.punct },
     { token: 'identifier', foreground: c.text }, { token: 'variable', foreground: c.text },
-    { token: 'function', foreground: c.func }, { token: 'method', foreground: c.func }, { token: 'parameter', foreground: c.param },
+    { token: 'function', foreground: c.func }, { token: 'method', foreground: c.func }, { token: 'parameter', foreground: c.param, fontStyle: 'italic' },
     { token: 'property', foreground: c.prop }, { token: 'namespace', foreground: c.ns }, { token: 'macro', foreground: c.macro },
   ];
+  const dark = { comment: '7F848E', keyword: 'C678DD', type: 'E5C07B', number: 'D19A66', string: '98C379', punct: 'ABB2BF', text: 'ABB2BF',
+    func: '61AFEF', param: 'ABB2BF', prop: '56B6C2', ns: 'E5C07B', macro: 'C678DD' };
+  const light = { comment: 'A0A1A7', keyword: 'A626A4', type: 'C18401', number: '986801', string: '50A14F', punct: '383A42', text: '383A42',
+    func: '4078F2', param: '383A42', prop: '0184BC', ns: 'C18401', macro: 'A626A4' };
+  // Скобки всех уровней — цветом знаков, как в схеме. Раскраска по уровням — настройка модели, и Monaco
+  // возвращает её при каждом updateOptions редактора, поэтому всем уровням просто дан один цвет
+  const brackets = (c) => Object.fromEntries([1, 2, 3].map((i) => [`editorBracketHighlight.foreground${i}`, `#${c.punct}`]));
   monaco.editor.defineTheme('kompot-dark', {
     base: 'vs-dark', inherit: true, semanticHighlighting: true,
-    rules: rules({ comment: '71717A', keyword: 'C4B5FD', type: '5EEAD4', number: 'FDBA74', string: '86EFAC', punct: 'A1A1AA', text: 'F4F4F5',
-      func: 'F2C879', param: 'F9A8D4', prop: '7DD3FC', ns: 'D4D4D8', macro: 'F0ABFC' }),
+    rules: rules(dark),
     colors: {
-      'editor.background': '#0C0C0E', 'editor.foreground': '#F4F4F5', 'editor.lineHighlightBackground': '#16161A', 'editor.lineHighlightBorder': '#00000000',
+      ...brackets(dark),
+      'editor.background': '#0C0C0E', 'editor.foreground': '#ABB2BF', 'editor.lineHighlightBackground': '#16161A', 'editor.lineHighlightBorder': '#00000000',
       'editorLineNumber.foreground': '#3F3F46', 'editorLineNumber.activeForeground': '#A1A1AA', 'editorGutter.background': '#0C0C0E',
       'editor.selectionBackground': '#6366F152', 'editor.inactiveSelectionBackground': '#6366F12E', 'editorCursor.foreground': '#A5B4FC',
       'editorIndentGuide.background1': '#1C1C20', 'editorIndentGuide.activeBackground1': '#1C1C20', 'editorWhitespace.foreground': '#27272A',
-      'editorBracketHighlight.foreground1': '#A5B4FC', 'editorBracketHighlight.foreground2': '#C4B5FD', 'editorBracketHighlight.foreground3': '#5EEAD4',
       'editorBracketMatch.background': '#818CF826', 'editorBracketMatch.border': '#00000000',
       'editor.wordHighlightBackground': '#818CF81F', 'editor.wordHighlightStrongBackground': '#818CF829', 'editor.wordHighlightBorder': '#00000000',
       'editorWidget.background': '#18181BD9', 'editorWidget.border': '#FFFFFF17', 'editorHoverWidget.background': '#18181BD9', 'editorHoverWidget.border': '#FFFFFF17',
@@ -159,14 +166,13 @@ function defineThemes() {
   });
   monaco.editor.defineTheme('kompot-light', {
     base: 'vs', inherit: true, semanticHighlighting: true,
-    rules: rules({ comment: 'A1A1AA', keyword: '7C3AED', type: '0F766E', number: '1D4ED8', string: '15803D', punct: '71717A', text: '18181B',
-      func: 'C2410C', param: 'BE185D', prop: '0369A1', ns: '52525B', macro: 'A21CAF' }),
+    rules: rules(light),
     colors: {
-      'editor.background': '#FFFFFF', 'editor.foreground': '#18181B', 'editor.lineHighlightBackground': '#F7F7F8', 'editor.lineHighlightBorder': '#00000000',
+      ...brackets(light),
+      'editor.background': '#FFFFFF', 'editor.foreground': '#383A42', 'editor.lineHighlightBackground': '#F7F7F8', 'editor.lineHighlightBorder': '#00000000',
       'editorLineNumber.foreground': '#D4D4D8', 'editorLineNumber.activeForeground': '#52525B',
       'editor.selectionBackground': '#6366F12E', 'editor.inactiveSelectionBackground': '#6366F11A', 'editorCursor.foreground': '#4F46E5',
       'editorIndentGuide.background1': '#F0F0F2', 'editorIndentGuide.activeBackground1': '#F0F0F2',
-      'editorBracketHighlight.foreground1': '#4F46E5', 'editorBracketHighlight.foreground2': '#7C3AED', 'editorBracketHighlight.foreground3': '#0F766E',
       'editorBracketMatch.background': '#4F46E514', 'editorBracketMatch.border': '#00000000',
       'editor.wordHighlightBackground': '#4F46E512', 'editor.wordHighlightStrongBackground': '#4F46E51C', 'editor.wordHighlightBorder': '#00000000',
       'editorWidget.background': '#FFFFFFD9', 'editorWidget.border': '#E4E4E7', 'editorHoverWidget.background': '#FFFFFFD9', 'editorHoverWidget.border': '#E4E4E7',
@@ -225,7 +231,7 @@ function initMonaco() {
         smoothScrolling: false, cursorBlinking: 'solid', cursorSmoothCaretAnimation: 'off', renderLineHighlight: 'all',
         suggest: { preview: false, showWords: false, localityBonus: true }, quickSuggestionsDelay: 60, suggestFontSize: 13, suggestLineHeight: 22,
         wordBasedSuggestions: 'currentDocument', matchBrackets: 'always', 'semanticHighlighting.enabled': true, glyphMargin: true,
-        padding: { top: 14, bottom: 14 }, bracketPairColorization: { enabled: true },
+        padding: { top: 14, bottom: 14 },
         lineNumbersMinChars: 3, lineDecorationsWidth: 14, folding: false, contextmenu: false,
         guides: { bracketPairs: false, bracketPairsHorizontal: false, highlightActiveBracketPair: false, indentation: true, highlightActiveIndentation: false },
         automaticLayout: true, tabSize: 4, insertSpaces: true, roundedSelection: true, stickyScroll: { enabled: false },
