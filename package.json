@@ -1,7 +1,7 @@
 {
   "name": "kompot",
   "productName": "Kompot",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Редактор для олимпиадных задач на C++: код, ввод и тесты рядом",
   "main": "src/main.js",
   "private": true,
