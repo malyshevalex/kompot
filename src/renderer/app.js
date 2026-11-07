@@ -244,38 +244,42 @@ function initMonaco() {
       ed.onDidChangeCursorPosition((e) => { $('sbCursor').textContent = `Стр ${e.position.lineNumber}, стлб ${e.position.column}`; });
       const KM = monaco.KeyMod;
       const KC = monaco.KeyCode;
-      ed.addCommand(KC.F5, () => (dbg.active ? debugCommand('continue') : run()));
-      ed.addCommand(KM.Shift | KC.F5, () => debugCommand('stop'));
-      ed.addCommand(KC.F6, () => startDebug());
+      // Сочетания Monaco общие для всех редакторов в окне: без условия kompotMain F5 или Ctrl+S
+      // в окне просмотра большого теста сработали бы как в главном редакторе
+      ed.createContextKey('kompotMain', true);
+      const cmd = (kb, fn, when) => ed.addCommand(kb, fn, when ? `kompotMain && ${when}` : 'kompotMain');
+      cmd(KC.F5, () => (dbg.active ? debugCommand('continue') : run()));
+      cmd(KM.Shift | KC.F5, () => debugCommand('stop'));
+      cmd(KC.F6, () => startDebug());
       // Отладка: клавиши Visual Studio (F9, F10, F11) и CLion / Free Pascal (F7, F8, F4, Ctrl+F8, Ctrl+F2)
       dbg.ctx = ed.createContextKey('kompotDebug', false);
-      ed.addCommand(KC.F9, () => toggleBreakpoint(ed.getPosition().lineNumber));
-      ed.addCommand(KM.CtrlCmd | KC.F8, () => toggleBreakpoint(ed.getPosition().lineNumber));
-      ed.addCommand(KC.F8, () => debugKey('over'));
-      ed.addCommand(KC.F10, () => debugKey('over'));
-      ed.addCommand(KC.F7, () => debugKey('into'));
-      ed.addCommand(KC.F11, () => debugKey('into'));
-      ed.addCommand(KM.Shift | KC.F8, () => debugCommand('out'));
-      ed.addCommand(KM.Shift | KC.F11, () => debugCommand('out'));
-      ed.addCommand(KC.F4, () => debugKey('cursor'));
-      ed.addCommand(KM.CtrlCmd | KC.F2, () => debugCommand('stop'), 'kompotDebug');
+      cmd(KC.F9, () => toggleBreakpoint(ed.getPosition().lineNumber));
+      cmd(KM.CtrlCmd | KC.F8, () => toggleBreakpoint(ed.getPosition().lineNumber));
+      cmd(KC.F8, () => debugKey('over'));
+      cmd(KC.F10, () => debugKey('over'));
+      cmd(KC.F7, () => debugKey('into'));
+      cmd(KC.F11, () => debugKey('into'));
+      cmd(KM.Shift | KC.F8, () => debugCommand('out'));
+      cmd(KM.Shift | KC.F11, () => debugCommand('out'));
+      cmd(KC.F4, () => debugKey('cursor'));
+      cmd(KM.CtrlCmd | KC.F2, () => debugCommand('stop'), 'kompotDebug');
       bindBreakpointGutter();
       ed.onContextMenu(() => K.editorMenu({ hasSelection: !ed.getSelection().isEmpty(), debugging: dbg.active }));
       // Свой поиск и замена вместо панели Monaco
       find.ctx = ed.createContextKey('kompotFindOpen', false);
-      ed.addCommand(KM.CtrlCmd | KC.KeyF, () => openFind(false));
-      ed.addCommand(IS_MAC ? KM.CtrlCmd | KM.Alt | KC.KeyF : KM.CtrlCmd | KC.KeyH, () => openFind(true));
-      ed.addCommand(KC.F3, () => (find.open ? findStep(1) : openFind(false)));
-      ed.addCommand(KM.Shift | KC.F3, () => (find.open ? findStep(-1) : openFind(false)));
+      cmd(KM.CtrlCmd | KC.KeyF, () => openFind(false));
+      cmd(IS_MAC ? KM.CtrlCmd | KM.Alt | KC.KeyF : KM.CtrlCmd | KC.KeyH, () => openFind(true));
+      cmd(KC.F3, () => (find.open ? findStep(1) : openFind(false)));
+      cmd(KM.Shift | KC.F3, () => (find.open ? findStep(-1) : openFind(false)));
       if (IS_MAC) {
-        ed.addCommand(KM.CtrlCmd | KC.KeyG, () => (find.open ? findStep(1) : openFind(false)));
-        ed.addCommand(KM.CtrlCmd | KM.Shift | KC.KeyG, () => (find.open ? findStep(-1) : openFind(false)));
+        cmd(KM.CtrlCmd | KC.KeyG, () => (find.open ? findStep(1) : openFind(false)));
+        cmd(KM.CtrlCmd | KM.Shift | KC.KeyG, () => (find.open ? findStep(-1) : openFind(false)));
       }
-      ed.addCommand(KC.Escape, () => closeFind(), 'kompotFindOpen && !suggestWidgetVisible && !parameterHintsVisible');
-      ed.addCommand(KM.CtrlCmd | KC.KeyS, () => save());
-      ed.addCommand(KM.CtrlCmd | KM.Shift | KC.KeyS, () => save(true));
-      ed.addCommand(KM.CtrlCmd | KC.KeyO, openFile);
-      ed.addCommand(KM.CtrlCmd | KC.KeyN, newFile);
+      cmd(KC.Escape, () => closeFind(), 'kompotFindOpen && !suggestWidgetVisible && !parameterHintsVisible');
+      cmd(KM.CtrlCmd | KC.KeyS, () => save());
+      cmd(KM.CtrlCmd | KM.Shift | KC.KeyS, () => save(true));
+      cmd(KM.CtrlCmd | KC.KeyO, openFile);
+      cmd(KM.CtrlCmd | KC.KeyN, newFile);
       resolve();
     });
     document.head.appendChild(ru);
@@ -443,6 +447,7 @@ function setDocument(text, file) {
 }
 
 async function confirmLeave() {
+  flushTests();
   if (!state.dirty && (state.file || !state.tests.length)) return true;
   if (state.file) return save(false, true);  // сохранённый файл молча дописываем; не записался — не уходим
   const r = await askSave('без имени.cpp');
@@ -491,7 +496,7 @@ async function openPath(p) {
   }
   setDocument(r.text, p);
   clearDraft();
-  state.tests = await K.loadTests(p);
+  state.tests = foldIfMany(await K.loadTests(p));
   renderTests();
   rememberRecent(p);
 }
@@ -504,6 +509,7 @@ async function rememberRecent(p) {
 
 async function save(as = false, quiet = false) {
   clearTimeout(autosaveTimer);
+  flushTests();
   let target = state.file;
   if (as || !target) {
     target = await K.saveAsDialog(state.file ? basename(state.file) : 'solution.cpp');
@@ -558,28 +564,27 @@ async function renderSidebar() {
 
 // ---------- тесты ----------
 const plainTests = () => state.tests.map(({ input, expected }) => ({ input, expected }));
-let testsSaveTimer;
+// Тесты хранит основной процесс: у сохранённого файла — свой набор, у несохранённого (state.file = null) — черновик
+let testsSaveTimer = null;
 function persistTests() {
   clearTimeout(testsSaveTimer);
-  testsSaveTimer = setTimeout(() => {
-    if (state.file) K.saveTests(state.file, plainTests());
-    else saveDraftTests();
-  }, 400);
+  testsSaveTimer = setTimeout(flushTests, 400);
+}
+// Дописать отложенное сохранение тестов сейчас: перед сменой файла, чтобы тесты не уехали к другому файлу
+function flushTests() {
+  if (testsSaveTimer === null) return;
+  clearTimeout(testsSaveTimer);
+  testsSaveTimer = null;
+  K.saveTests(state.file, plainTests());
 }
 
 // Черновик несохранённого файла: код и тесты переживают перезапуск, пока файлу не дадут имя
-function saveDraftTests() {
-  try {
-    if (state.tests.length) localStorage.setItem('draftTests', JSON.stringify(plainTests()));
-    else localStorage.removeItem('draftTests');
-  } catch {}
-}
-
 function clearDraft() {
   try {
     localStorage.removeItem('draft');
-    localStorage.removeItem('draftTests');
+    localStorage.removeItem('draftTests');  // тесты черновика из старых версий
   } catch {}
+  K.saveTests(null, []);
 }
 
 const VERDICT_TEXT = { OK: 'OK', WA: 'WA', TLE: 'TLE', RE: 'RE', MLE: 'MLE', OLE: 'OLE', DONE: 'ГОТОВО', RUN: 'ИДЁТ' };
@@ -590,14 +595,89 @@ function chip(v) {
   return `<span class="chip ${cls}">${VERDICT_TEXT[v]}</span>`;
 }
 
+// Большие тексты (сотни тысяч строк) в полях ввода тормозят всё окно. Поэтому большой текст
+// показываем началом, а целиком — во встроенном редакторе: Monaco рисует только видимые строки
+const BIG_TEXT = 64 * 1024;
+const PREVIEW_LINES = 100;
+const PREVIEW_COLS = 300;
+const plural = (n, one, few, many) => {
+  const a = n % 10;
+  const b = n % 100;
+  return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
+};
+const fmtCount = (n) => n.toLocaleString('ru-RU');
+const fmtLines = (n) => `${fmtCount(n)} ${plural(n, 'строка', 'строки', 'строк')}`;
+const fmtSize = (n) => (n < 1 << 20 ? `${Math.max(1, Math.round(n / 1024))} КБ` : `${(n / (1 << 20)).toFixed(1).replace('.', ',')} МБ`);
+const cutLine = (l) => (l.length > PREVIEW_COLS ? `${l.slice(0, PREVIEW_COLS)}…` : l);
+const normLine = (s) => (s || '').trim().split(/\s+/).join(' ');
+const firstLine = (s) => {
+  const k = s.indexOf('\n');
+  return s.slice(0, k < 0 || k > 40 ? 40 : k);
+};
+
+// Число строк и начало текста: считаются один раз, пока текст не поменялся
+function textInfo(owner, key, text) {
+  const cache = owner._info || (owner._info = {});
+  if (cache[key]?.text === text) return cache[key];
+  let lines = 0;
+  let headEnd = -1;
+  for (let p = text.indexOf('\n'); p !== -1; p = text.indexOf('\n', p + 1)) {
+    if (++lines === PREVIEW_LINES) headEnd = p;
+  }
+  if (text && !text.endsWith('\n')) lines += 1;
+  const head = (headEnd < 0 ? text.replace(/\n$/, '') : text.slice(0, headEnd)).split('\n').map(cutLine).join('\n');
+  return (cache[key] = { text, lines, head });
+}
+
+const ioMeta = (lines, size, what) =>
+  `<span class="io-meta">${fmtLines(lines)} · ${fmtSize(size)}<button class="btn" data-variant="outline" data-size="xs" data-open="${what}">Открыть</button></span>`;
+const moreLines = (n) => (n > 0 ? `<span class="more">… ещё ${fmtLines(n)}</span>` : '');
+
+// Ввод или ответ: обычное поле, а большой текст — началом и кнопкой «Открыть»
+function ioField(t, f, label, placeholder) {
+  const text = t[f] || '';
+  if (text.length <= BIG_TEXT) {
+    return `<div><div class="io-label">${label}</div><textarea class="io" data-f="${f}" spellcheck="false" rows="${rowsFor(text)}" placeholder="${placeholder}">${esc(text)}</textarea></div>`;
+  }
+  const info = textInfo(t, f, text);
+  const more = info.lines > PREVIEW_LINES ? `\n${moreLines(info.lines - PREVIEW_LINES)}` : '';
+  return `<div><div class="io-label"><span>${label}</span>${ioMeta(info.lines, text.length, f)}</div><pre class="io">${esc(info.head)}${more}</pre></div>`;
+}
+
 function outputHtml(t) {
   const r = t.result;
   const lines = r.stdout.replace(/\s+$/, '').split('\n');
   const exp = (t.expected || '').replace(/\s+$/, '').split('\n');
-  const norm = (s) => (s || '').trim().split(/\s+/).join(' ');
-  const body = lines.map((l, i) => (r.verdict === 'WA' && norm(l) !== norm(exp[i]) ? `<span class="bad-line">${esc(l)}</span>` : esc(l))).join('\n');
+  const body = lines.map((l, i) => (r.verdict === 'WA' && normLine(l) !== normLine(exp[i]) ? `<span class="bad-line">${esc(l)}</span>` : esc(l))).join('\n');
   const err = r.stderr ? `\n<span class="err">${esc(r.stderr.trimEnd())}</span>` : '';
   return body + err || '<span class="muted">(пусто)</span>';
+}
+
+// Большой вывод: при WA — кусок вокруг первой несовпавшей строки, иначе начало. Считается один раз на результат
+function outputView(t) {
+  const r = t.result;
+  if (r._view) return r._view;
+  const lines = r.stdout.replace(/\s+$/, '').split('\n');
+  const exp = r.verdict === 'WA' ? (t.expected || '').replace(/\s+$/, '').split('\n') : null;
+  const bad = (i) => !!exp && normLine(lines[i]) !== normLine(exp[i]);
+  let first = -1;
+  for (let i = 0; exp && i < lines.length && first < 0; i++) if (bad(i)) first = i;
+  if (exp && first < 0 && exp.length > lines.length) first = lines.length - 1;  // вывод оборвался раньше ответа
+  const start = first > 20 ? first - 20 : 0;
+  const end = Math.min(lines.length, start + PREVIEW_LINES);
+  const shown = [];
+  for (let i = start; i < end; i++) shown.push(bad(i) ? `<span class="bad-line">${esc(cutLine(lines[i]))}</span>` : esc(cutLine(lines[i])));
+  const before = start ? `<span class="more">… строки 1–${fmtCount(start)} совпадают с ответом</span>\n` : '';
+  const after = end < lines.length ? `\n${moreLines(lines.length - end)}` : '';
+  return (r._view = { lines: lines.length, first, html: before + shown.join('\n') + after });
+}
+
+function outputField(t) {
+  const r = t.result;
+  if (r.stdout.length <= BIG_TEXT) return `<div class="full"><div class="io-label">Вывод программы</div><pre class="io">${outputHtml(t)}</pre></div>`;
+  const v = outputView(t);
+  const err = r.stderr ? `\n<span class="err">${esc(r.stderr.trimEnd())}</span>` : '';
+  return `<div class="full"><div class="io-label"><span>Вывод программы</span>${ioMeta(v.lines, r.stdout.length, 'output')}</div><pre class="io">${v.html}${err}</pre></div>`;
 }
 
 function renderTests() {
@@ -614,6 +694,12 @@ function renderTests() {
   updateSummary();
 }
 
+// Много тестов — показываем свёрнутыми: раскрывают нужный
+function foldIfMany(tests) {
+  for (const t of tests) t.collapsed = tests.length > 3;
+  return tests;
+}
+
 function testCard(t, i) {
   const el = document.createElement('div');
   el.className = `test${t.collapsed ? ' collapsed' : ''}${t.running ? ' running' : ''}${t.stale ? ' stale' : ''}`;
@@ -622,7 +708,7 @@ function testCard(t, i) {
     <div class="test-head">
       <span class="test-num">#${i + 1}</span>
       ${t.running ? chip('RUN') : r ? chip(r.verdict) : ''}
-      <span class="preview">${esc((t.input || '').split('\n')[0].slice(0, 40))}</span>
+      <span class="preview">${esc(firstLine(t.input || ''))}</span>
       <span class="test-metrics">${r ? `<span>${fmtTime(r.time)}</span><span>${fmtMem(r.memory)}</span>` : ''}</span>
       <span class="test-actions">
         <button class="btn" data-variant="ghost" data-size="icon-xs" data-act="run" title="Запустить этот тест"><span class="ic">${icon('play')}</span></button>
@@ -630,13 +716,9 @@ function testCard(t, i) {
         <button class="btn" data-variant="ghost" data-size="icon-xs" data-act="dup" title="Копия"><span class="ic">${icon('copy')}</span></button>
         <button class="btn" data-variant="ghost" data-size="icon-xs" data-act="del" title="Удалить"><span class="ic">${icon('trash')}</span></button>
       </span>
-    </div>
-    <div class="test-body">
-      <div><div class="io-label">Ввод</div><textarea class="io" data-f="input" spellcheck="false" rows="${rowsFor(t.input)}" placeholder="что прочитает программа">${esc(t.input)}</textarea></div>
-      <div><div class="io-label">Ответ</div><textarea class="io" data-f="expected" spellcheck="false" rows="${rowsFor(t.expected)}" placeholder="необязательно">${esc(t.expected)}</textarea></div>
-      ${r ? `<div class="full"><div class="io-label">Вывод программы</div><pre class="io">${outputHtml(t)}</pre></div>` : ''}
-      ${r && r.note ? `<div class="note full${r.verdict === 'RE' ? ' re' : ''}">${esc(r.note)}</div>` : ''}
     </div>`;
+  // у свёрнутого теста тела нет вовсе: текст попадает в окно, только когда тест раскрыт
+  if (!t.collapsed) el.appendChild(testBody(t));
   el.querySelector('.test-head').onclick = (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'run') return runTests([i]);
@@ -653,18 +735,125 @@ function testCard(t, i) {
     }
     t.collapsed = !t.collapsed;
     el.classList.toggle('collapsed', t.collapsed);
+    if (t.collapsed) el.querySelector('.test-body')?.remove();
+    else el.appendChild(testBody(t));
   };
-  el.querySelectorAll('textarea').forEach((ta) => {
+  return el;
+}
+
+function testBody(t) {
+  const r = t.result;
+  const body = document.createElement('div');
+  body.className = 'test-body';
+  body.innerHTML = `
+    ${ioField(t, 'input', 'Ввод', 'что прочитает программа')}
+    ${ioField(t, 'expected', 'Ответ', 'необязательно')}
+    ${r ? outputField(t) : ''}
+    ${r && r.note ? `<div class="note full${r.verdict === 'RE' ? ' re' : ''}">${esc(r.note)}</div>` : ''}`;
+  body.querySelectorAll('textarea').forEach((ta) => {
     ta.oninput = () => {
       t[ta.dataset.f] = ta.value;
       ta.rows = rowsFor(ta.value);
       persistTests();
     };
   });
-  return el;
+  body.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => openTestText(t, b.dataset.open); });
+  return body;
 }
 
-const rowsFor = (text) => Math.max(2, Math.min(10, (text || '').split('\n').length));
+const rowsFor = (text) => {
+  let n = 1;
+  for (let p = (text || '').indexOf('\n'); p !== -1 && n < 10; p = text.indexOf('\n', p + 1)) n++;
+  return Math.max(2, n);
+};
+
+// Большой текст теста целиком — во встроенном редакторе. Правки ввода и ответа сохраняются при закрытии
+function openTestText(t, f) {
+  const n = state.tests.indexOf(t) + 1;
+  if (f === 'output') {
+    const r = t.result;
+    const v = outputView(t);
+    return openViewer({
+      title: `Тест #${n} — вывод программы`,
+      info: `${fmtLines(v.lines)} · ${fmtSize(r.stdout.length)}${r.note ? ` · ${r.note}` : ''}`,
+      text: r.stdout,
+      readOnly: true,
+      line: v.first >= 0 ? v.first + 1 : 1,
+      bad: r.verdict === 'WA' ? badLines(t) : [],
+    });
+  }
+  const text = t[f] || '';
+  return openViewer({
+    title: `Тест #${n} — ${f === 'input' ? 'ввод' : 'ответ'}`,
+    info: `${fmtLines(textInfo(t, f, text).lines)} · ${fmtSize(text.length)} · правки сохранятся при закрытии`,
+    text,
+    onSave: (value) => {
+      t[f] = value;
+      persistTests();
+      const k = state.tests.indexOf(t);
+      if (k >= 0) renderTestCard(k);
+    },
+  });
+}
+
+// Номера несовпавших строк вывода (с 1) для подсветки; нескольких тысяч хватает, чтобы увидеть картину
+function badLines(t) {
+  const lines = t.result.stdout.split('\n');
+  const exp = (t.expected || '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length && out.length < 5000; i++) if (normLine(lines[i]) !== normLine(exp[i])) out.push(i + 1);
+  return out;
+}
+
+// ---------- большой текст во встроенном редакторе ----------
+const viewer = { ed: null, model: null, decor: null, open: false, version: 0, onSave: null };
+
+function openViewer({ title, info, text, readOnly = false, line = 1, bad = [], onSave = null }) {
+  if (!viewer.ed) {
+    viewer.ed = monaco.editor.create($('viewerEditor'), {
+      fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontLigatures: false, lineHeight: 1.5,
+      minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, folding: false, glyphMargin: false,
+      lineNumbersMinChars: 6, lineDecorationsWidth: 8, renderLineHighlight: 'line', occurrencesHighlight: 'off',
+      selectionHighlight: false, matchBrackets: 'never', links: false, quickSuggestions: false, suggestOnTriggerCharacters: false,
+      wordBasedSuggestions: 'off', parameterHints: { enabled: false }, stickyScroll: { enabled: false }, guides: { indentation: false },
+      unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false, nonBasicASCII: false },
+      smoothScrolling: false, padding: { top: 8, bottom: 8 }, overviewRulerBorder: false, hideCursorInOverviewRuler: true,
+      scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+    });
+    viewer.decor = viewer.ed.createDecorationsCollection();
+  }
+  viewer.model = monaco.editor.createModel(text, 'plaintext');
+  viewer.ed.setModel(viewer.model);
+  viewer.ed.updateOptions({ readOnly, fontSize: state.settings.fontSize });
+  viewer.version = viewer.model.getAlternativeVersionId();
+  viewer.onSave = readOnly ? null : onSave;
+  $('viewerTitle').textContent = title;
+  $('viewerInfo').textContent = info;
+  $('viewerInfo').title = info;
+  $('viewerModal').hidden = false;
+  viewer.open = true;
+  viewer.ed.layout();
+  viewer.decor.set(bad.map((ln) => ({
+    range: new monaco.Range(ln, 1, ln, 1),
+    options: { isWholeLine: true, className: 'viewer-bad-line', overviewRuler: { color: { id: 'editorError.foreground' }, position: monaco.editor.OverviewRulerLane.Full } },
+  })));
+  viewer.ed.setPosition({ lineNumber: line, column: 1 });
+  viewer.ed.revealLineInCenter(line);
+  viewer.ed.focus();
+}
+
+function closeViewer() {
+  if (!viewer.open) return;
+  viewer.open = false;
+  $('viewerModal').hidden = true;
+  const m = viewer.model;
+  if (viewer.onSave && m.getAlternativeVersionId() !== viewer.version) viewer.onSave(m.getValue());
+  viewer.decor.clear();
+  viewer.ed.setModel(null);
+  m.dispose();
+  viewer.model = null;
+  viewer.onSave = null;
+}
 
 function updateSummary() {
   if (state.running || dbg.active || state.lastRun !== 'tests') return;
@@ -699,7 +888,7 @@ async function importTests() {
     toast('В папке не нашлось тестов');
     return;
   }
-  for (const t of r.tests) t.collapsed = r.tests.length > 3;
+  foldIfMany(r.tests);
   state.tests.push(...r.tests);
   persistTests();
   renderTests();
@@ -1549,7 +1738,7 @@ function bindSettings() {
       applyTheme();
     };
   });
-  document.querySelectorAll('.modal').forEach((m) => {
+  document.querySelectorAll('.modal:not(#viewerModal)').forEach((m) => {
     m.addEventListener('click', (e) => {
       if (e.target === m || e.target.closest('[data-close]')) m.hidden = true;
     });
@@ -1609,7 +1798,7 @@ async function main() {
     const r = await K.read(s.file);
     if (!r.error) {
       setDocument(r.text, s.file);
-      state.tests = await K.loadTests(s.file);
+      state.tests = foldIfMany(await K.loadTests(s.file));
       opened = true;
     }
   }
@@ -1620,8 +1809,15 @@ async function main() {
     } catch {}
     setDocument(draft || TEMPLATE, null);
     if (draft) markDirty();
+    state.tests = foldIfMany(await K.loadTests(null));
     try {
-      state.tests = JSON.parse(localStorage.getItem('draftTests') || '[]');
+      // тесты черновика из старых версий жили в localStorage — переносим к остальным
+      const old = JSON.parse(localStorage.getItem('draftTests') || '[]');
+      if (old.length && !state.tests.length) {
+        state.tests = old;
+        await K.saveTests(null, plainTests());
+      }
+      localStorage.removeItem('draftTests');
     } catch {}
   }
   renderTests();
@@ -1671,8 +1867,18 @@ async function main() {
     toast(r.error ? `Не получилось: ${r.error}` : 'Подсказки установлены');
   };
 
+  $('viewerClose').onclick = closeViewer;
+  $('viewerModal').addEventListener('mousedown', (e) => { if (e.target === $('viewerModal')) closeViewer(); });
+
   window.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
+    if (viewer.open) {  // поверх всего открыт большой текст теста: остальные клавиши окна не трогаем
+      if (e.key === 'Escape' || (mod && e.key.toLowerCase() === 's')) {
+        e.preventDefault();
+        closeViewer();
+      }
+      return;
+    }
     if (e.key === 'F5' && e.shiftKey) {
       e.preventDefault();
       debugCommand('stop');

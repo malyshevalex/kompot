@@ -259,7 +259,10 @@ ipcMain.handle('fs:reveal', (_e, file) => shell.showItemInFolder(file));
 // Тесты хранятся внутри приложения (папка data/tests), по одному файлу на решение
 const TESTS = path.join(DATA, 'tests');
 fs.mkdirSync(TESTS, { recursive: true });
-const testsFile = (file) => path.join(TESTS, crypto.createHash('sha1').update(path.resolve(file).toLowerCase()).digest('hex') + '.json');
+// file = null — тесты несохранённого файла (черновик): в localStorage большие наборы не помещаются
+const testsFile = (file) => path.join(TESTS, file
+  ? crypto.createHash('sha1').update(path.resolve(file).toLowerCase()).digest('hex') + '.json'
+  : 'draft.json');
 ipcMain.handle('tests:load', (_e, file) => {
   try {
     return JSON.parse(fs.readFileSync(testsFile(file), 'utf8')).tests || [];
@@ -268,6 +271,7 @@ ipcMain.handle('tests:load', (_e, file) => {
   }
 });
 ipcMain.handle('tests:save', (_e, file, tests) => {
+  if (!file && !tests.length) return fs.rmSync(testsFile(null), { force: true });
   fs.writeFileSync(testsFile(file), JSON.stringify({ file, tests }), 'utf8');
 });
 
